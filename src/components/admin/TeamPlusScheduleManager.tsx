@@ -317,7 +317,6 @@ export default function TeamPlusScheduleManager() {
               <div className="space-y-2">
                 <Label htmlFor="user_name" className="text-xs md:text-sm">Il Tuo Nome *</Label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="user_name"
                     value={formData.user_name}
