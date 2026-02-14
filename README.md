@@ -174,7 +174,7 @@ The application is built with a React frontend powered by Vite and Express backe
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/yourusername/legochris-hub.git
+git clone https://github.com/GabryCoso24/legochris-hub.git
 cd legochris-hub
 ```
 
