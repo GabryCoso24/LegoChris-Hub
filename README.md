@@ -1087,8 +1087,8 @@ Found a bug? Open an issue on GitHub with:
 
 ### Connect
 
-- **YouTube:** [LegoChris](https://youtube.com/legochris)
-- **Discord:** [Join Community](https://discord.gg/legochris)
+- **YouTube:** [LegoChris](https://youtube.com/@lego-chris)
+- **Discord:** [Join Community](https://dsc.gg/legochris)
 - **Email:** Available in footer
 
 ---
