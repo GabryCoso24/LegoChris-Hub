@@ -1,0 +1,8 @@
+[
+  { "id": "1", "username": "TeamMember1", "avatarUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=TeamMember1" },
+  { "id": "2", "username": "TeamMember2", "avatarUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=TeamMember2" },
+  { "id": "3", "username": "TeamMember3", "avatarUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=TeamMember3" },
+  { "id": "4", "username": "TeamMember4", "avatarUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=TeamMember4" },
+  { "id": "5", "username": "TeamMember5", "avatarUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=TeamMember5" },
+  { "id": "6", "username": "TeamMember6", "avatarUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=TeamMember6" }
+]

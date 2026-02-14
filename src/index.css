@@ -1,0 +1,317 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+/* LegoChris - Dark Creator Theme with Orange Glow Effects */
+
+@layer base {
+  :root {
+    --background: 20 10% 5%;
+    --foreground: 30 10% 95%;
+
+    --card: 20 15% 8%;
+    --card-foreground: 30 10% 95%;
+
+    --popover: 20 15% 8%;
+    --popover-foreground: 30 10% 95%;
+
+    --primary: 25 100% 55%;
+    --primary-foreground: 20 10% 5%;
+
+    --secondary: 20 15% 12%;
+    --secondary-foreground: 30 10% 95%;
+
+    --muted: 20 10% 15%;
+    --muted-foreground: 30 5% 55%;
+
+    --accent: 30 100% 60%;
+    --accent-foreground: 20 10% 5%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 30 10% 95%;
+
+    --border: 25 20% 18%;
+    --input: 25 20% 18%;
+    --ring: 25 100% 55%;
+
+    --radius: 0.75rem;
+
+    /* Custom design tokens */
+    --glow-orange: 25 100% 55%;
+    --glow-amber: 35 100% 50%;
+    --dark-surface: 20 15% 7%;
+    --dark-surface-elevated: 20 15% 10%;
+    --gradient-start: 25 100% 55%;
+    --gradient-end: 35 100% 50%;
+    
+    --sidebar-background: 20 15% 7%;
+    --sidebar-foreground: 30 10% 95%;
+    --sidebar-primary: 25 100% 55%;
+    --sidebar-primary-foreground: 20 10% 5%;
+    --sidebar-accent: 20 15% 12%;
+    --sidebar-accent-foreground: 30 10% 95%;
+    --sidebar-border: 25 20% 18%;
+    --sidebar-ring: 25 100% 55%;
+  }
+
+  .dark {
+    --background: 20 10% 5%;
+    --foreground: 30 10% 95%;
+    --card: 20 15% 8%;
+    --card-foreground: 30 10% 95%;
+    --popover: 20 15% 8%;
+    --popover-foreground: 30 10% 95%;
+    --primary: 25 100% 55%;
+    --primary-foreground: 20 10% 5%;
+    --secondary: 20 15% 12%;
+    --secondary-foreground: 30 10% 95%;
+    --muted: 20 10% 15%;
+    --muted-foreground: 30 5% 55%;
+    --accent: 30 100% 60%;
+    --accent-foreground: 20 10% 5%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 30 10% 95%;
+    --border: 25 20% 18%;
+    --input: 25 20% 18%;
+    --ring: 25 100% 55%;
+    --sidebar-background: 20 15% 7%;
+    --sidebar-foreground: 30 10% 95%;
+    --sidebar-primary: 25 100% 55%;
+    --sidebar-primary-foreground: 20 10% 5%;
+    --sidebar-accent: 20 15% 12%;
+    --sidebar-accent-foreground: 30 10% 95%;
+    --sidebar-border: 25 20% 18%;
+    --sidebar-ring: 25 100% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', sans-serif;
+    overflow-y: scroll;
+  }
+  
+  html {
+    overflow-y: scroll;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Space Grotesk', sans-serif;
+  }
+}
+
+@layer components {
+  /* Glow effects */
+  .glow-orange {
+    box-shadow: 0 0 30px hsl(25 100% 55% / 0.3),
+                0 0 60px hsl(25 100% 55% / 0.2),
+                0 0 100px hsl(25 100% 55% / 0.1);
+  }
+
+  .glow-text {
+    text-shadow: 0 0 30px hsl(25 100% 55% / 0.5),
+                 0 0 60px hsl(25 100% 55% / 0.3);
+  }
+
+  .glow-border {
+    border: 1px solid hsl(25 100% 55% / 0.3);
+    box-shadow: 0 0 15px hsl(25 100% 55% / 0.2),
+                inset 0 0 15px hsl(25 100% 55% / 0.05);
+  }
+
+  .logo-glow {
+    filter: brightness(0) saturate(100%) invert(58%) sepia(85%) saturate(2458%) hue-rotate(358deg) brightness(103%) contrast(101%)
+            drop-shadow(0 0 20px hsl(25 100% 55% / 0.6))
+            drop-shadow(0 0 40px hsl(25 100% 55% / 0.4))
+            drop-shadow(0 0 60px hsl(25 100% 55% / 0.2));
+  }
+
+  /* Glass morphism */
+  .glass {
+    background: hsl(20 15% 8% / 0.8);
+    backdrop-filter: blur(20px);
+    border: 1px solid hsl(25 20% 20% / 0.5);
+  }
+
+  .glass-card {
+    background: linear-gradient(145deg, hsl(20 15% 10% / 0.9), hsl(20 15% 6% / 0.9));
+    backdrop-filter: blur(20px);
+    border: 1px solid hsl(25 20% 20% / 0.3);
+  }
+
+  /* Grid background pattern */
+  .grid-pattern {
+    background-image: 
+      linear-gradient(hsl(25 20% 15% / 0.3) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(25 20% 15% / 0.3) 1px, transparent 1px);
+    background-size: 50px 50px;
+  }
+
+  .grid-pattern-subtle {
+    background-image: 
+      linear-gradient(hsl(25 20% 15% / 0.15) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(25 20% 15% / 0.15) 1px, transparent 1px);
+    background-size: 30px 30px;
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    background: linear-gradient(135deg, hsl(25 100% 60%), hsl(35 100% 55%));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Animated gradient border */
+  .gradient-border {
+    position: relative;
+    background: hsl(20 15% 8%);
+    border-radius: var(--radius);
+  }
+
+  .gradient-border::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    background: linear-gradient(135deg, hsl(25 100% 55%), hsl(35 100% 50%), hsl(25 100% 55%));
+    z-index: -1;
+    opacity: 0.5;
+  }
+
+  /* Floating animation */
+  .float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-20px); }
+  }
+
+  /* Pulse glow animation */
+  .pulse-glow {
+    animation: pulseGlow 3s ease-in-out infinite;
+  }
+
+  @keyframes pulseGlow {
+    0%, 100% { 
+      box-shadow: 0 0 20px hsl(25 100% 55% / 0.3);
+    }
+    50% { 
+      box-shadow: 0 0 40px hsl(25 100% 55% / 0.5),
+                  0 0 80px hsl(25 100% 55% / 0.3);
+    }
+  }
+
+  /* Shimmer effect */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(20 15% 8%) 0%,
+      hsl(25 20% 15%) 50%,
+      hsl(20 15% 8%) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+
+  /* Hover scale */
+  .hover-lift {
+    transition: all 0.3s ease;
+  }
+
+  .hover-lift:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 20px 40px hsl(0 0% 0% / 0.3);
+  }
+
+  /* Section reveal animation */
+  .reveal {
+    opacity: 0;
+    transform: translateY(30px);
+    transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* Noise texture overlay */
+  .noise::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    opacity: 0.03;
+    pointer-events: none;
+  }
+
+  /* Radial gradient bg */
+  .radial-glow {
+    background: radial-gradient(circle at 50% 50%, hsl(25 100% 55% / 0.15), transparent 50%);
+  }
+
+  .radial-glow-top {
+    background: radial-gradient(ellipse 80% 50% at 50% 0%, hsl(25 100% 55% / 0.2), transparent);
+  }
+
+  /* Custom scrollbar utilities for mobile optimization */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(25 100% 55% / 0.2) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(25 100% 55% / 0.2);
+    border-radius: 3px;
+  }
+
+  .scrollbar-thin:hover::-webkit-scrollbar-thumb {
+    background-color: hsl(25 100% 55% / 0.4);
+  }
+
+  .scrollbar-thumb-primary\/20::-webkit-scrollbar-thumb {
+    background-color: hsl(25 100% 55% / 0.2);
+  }
+
+  .scrollbar-thumb-primary\/40::-webkit-scrollbar-thumb {
+    background-color: hsl(25 100% 55% / 0.4);
+  }
+
+  .scrollbar-track-transparent::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* Snap scrolling for mobile */
+  .snap-x {
+    scroll-snap-type: x mandatory;
+  }
+
+  .snap-start {
+    scroll-snap-align: start;
+  }
+}

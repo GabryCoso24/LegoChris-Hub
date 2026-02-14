@@ -1,0 +1,5 @@
+[
+  { "id": "s1", "username": "Staff1", "avatarUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Staff1" },
+  { "id": "s2", "username": "Staff2", "avatarUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Staff2" },
+  { "id": "s3", "username": "Staff3", "avatarUrl": "https://api.dicebear.com/7.x/avataaars/svg?seed=Staff3" }
+]
