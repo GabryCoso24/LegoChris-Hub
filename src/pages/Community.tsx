@@ -127,12 +127,17 @@ function FlipCard({ member, icon }: { member: Member; icon: React.ReactNode }) {
         className={`absolute w-full h-full transition-transform duration-500 ${
           isFlipped ? "[transform:rotateY(180deg)]" : ""
         }`}
-        style={{ transformStyle: "preserve-3d" }}
+        style={{ transformStyle: "preserve-3d", WebkitTransformStyle: "preserve-3d" }}
       >
         {/* Front */}
         <div
-          className="absolute w-full h-full bg-card p-3 rounded-lg flex flex-col items-center justify-center backface-hidden"
-          style={{ backfaceVisibility: "hidden" }}
+          className="absolute inset-0 bg-card p-3 rounded-lg flex flex-col items-center justify-center"
+          style={{
+            backfaceVisibility: "hidden",
+            WebkitBackfaceVisibility: "hidden",
+            transform: "rotateY(0deg) translateZ(0)",
+            WebkitTransform: "rotateY(0deg) translateZ(0)",
+          }}
         >
           {member.avatarUrl ? (
             <img
@@ -154,8 +159,13 @@ function FlipCard({ member, icon }: { member: Member; icon: React.ReactNode }) {
 
         {/* Back */}
         <div
-          className="absolute w-full h-full bg-primary/10 border border-primary/20 p-4 rounded-lg flex flex-col items-center justify-center backface-hidden [transform:rotateY(180deg)]"
-          style={{ backfaceVisibility: "hidden" }}
+          className="absolute inset-0 bg-card border border-primary/20 p-4 rounded-lg flex flex-col items-center justify-center"
+          style={{
+            backfaceVisibility: "hidden",
+            WebkitBackfaceVisibility: "hidden",
+            transform: "rotateY(180deg) translateZ(0)",
+            WebkitTransform: "rotateY(180deg) translateZ(0)",
+          }}
         >
           <div className="text-sm font-semibold text-center mb-2">{member.username}</div>
           <div className="text-xs text-foreground/80 text-center overflow-y-auto max-h-32">
