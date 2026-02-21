@@ -28,6 +28,7 @@ A comprehensive web application for managing content, e-commerce, and community 
 16. [Deployment](#deployment)
 17. [Troubleshooting](#troubleshooting)
 18. [Contributing](#contributing)
+19. [License](#license)
 
 ---
 
@@ -1071,7 +1072,9 @@ console.log('Debug output:', data);
 
 ## License
 
-This project is proprietary. All rights reserved.
+This project is available **only as educational reference material**.
+
+Use of the code is governed by [LICENSE.md](LICENSE.md).
 
 ---
 
