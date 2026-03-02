@@ -18,4 +18,6 @@ export const API_ENDPOINTS = {
   upload: `${API_URL}/api/upload`,
   userOrders: `${API_URL}/api/user-orders`,
   createCheckoutSession: `${API_URL}/api/create-checkout-session`,
+  checkNickname: `${API_URL}/api/check-nickname`,
+  profile: `${API_URL}/api/profile`,
 } as const;

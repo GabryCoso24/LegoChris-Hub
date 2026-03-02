@@ -13,12 +13,39 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Settings, User, LogOut, Shield, ShoppingBag, Calendar } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useState, useEffect } from "react";
+import { API_ENDPOINTS } from "@/lib/api";
 
 export const UserMenu = () => {
   const { user, signOut } = useAuth();
   const { isAdmin } = useAdmin();
   const { isTeamPlus } = useTeamPlus();
   const { toast } = useToast();
+  const [displayName, setDisplayName] = useState("");
+
+  useEffect(() => {
+    if (!user) return;
+
+    const loadDisplayName = async () => {
+      // Prova a caricare il nickname dal server
+      try {
+        const response = await fetch(`${API_ENDPOINTS.profile}/${user.id}`);
+        if (response.ok) {
+          const profile = await response.json();
+          setDisplayName(profile.nickname);
+          return;
+        }
+      } catch (error) {
+        console.error('Error loading profile:', error);
+      }
+
+      // Se il server non ha il profilo, usa i dati di default
+      const defaultName = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || "Utente";
+      setDisplayName(defaultName);
+    };
+
+    loadDisplayName();
+  }, [user]);
 
   if (!user) return null;
 
@@ -38,7 +65,7 @@ export const UserMenu = () => {
     }
   };
 
-  // Estrai foto profilo e nome
+  // Estrai foto profilo
   let avatarUrl = user.user_metadata?.custom_avatar_url || "";
   
   // Se non c'è avatar custom, prendi dal primo provider OAuth
@@ -47,7 +74,6 @@ export const UserMenu = () => {
     avatarUrl = identity.identity_data?.avatar_url || identity.identity_data?.picture || "";
   }
   
-  const displayName = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || "Utente";
   const initials = displayName.charAt(0).toUpperCase();
 
   return (

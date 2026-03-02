@@ -22,8 +22,11 @@ const Profile = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [nickname, setNickname] = useState("");
+  const [initialNickname, setInitialNickname] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
   const [newsletter, setNewsletter] = useState(false);
+  const [nicknameError, setNicknameError] = useState("");
+  const [isCheckingNickname, setIsCheckingNickname] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -33,22 +36,89 @@ const Profile = () => {
 
     if (!user) return;
 
-    // Carica i dati utente
-    const displayName = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || "";
-    
-    // Prendi l'avatar dal primo provider OAuth
-    let avatarFromProvider = "";
-    if (user.identities && user.identities.length > 0) {
-      const identity = user.identities[0];
-      avatarFromProvider = identity.identity_data?.avatar_url || identity.identity_data?.picture || "";
+    const loadProfileData = async () => {
+      // Carica i dati utente
+      const displayName = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || "";
+      
+      // Prendi l'avatar dal primo provider OAuth
+      let avatarFromProvider = "";
+      if (user.identities && user.identities.length > 0) {
+        const identity = user.identities[0];
+        avatarFromProvider = identity.identity_data?.avatar_url || identity.identity_data?.picture || "";
+      }
+      
+      // Prova a caricare il nickname dal server
+      let finalNickname = displayName;
+      try {
+        const response = await fetch(`${API_ENDPOINTS.profile}/${user.id}`);
+        if (response.ok) {
+          const profile = await response.json();
+          finalNickname = profile.nickname;
+        }
+      } catch (error) {
+        console.error('Error loading profile from server:', error);
+        // Usa il nickname di default se c'è errore
+      }
+
+      setInitialNickname(finalNickname);
+      setNickname(finalNickname);
+      setAvatarUrl(user.user_metadata?.custom_avatar_url || avatarFromProvider);
+      
+      // Controlla se iscritto alla newsletter (qui potresti fare una chiamata API)
+      setNewsletter(false);
+    };
+
+    loadProfileData();
+  }, [user, navigate, loading]);
+
+  // Debounce per la verifica del nickname
+  useEffect(() => {
+    // Se il nickname è vuoto o è lo stesso di quello iniziale, non verificare
+    if (!nickname || nickname === initialNickname || !user) {
+      setNicknameError("");
+      return;
     }
-    
-    setNickname(displayName);
-    setAvatarUrl(user.user_metadata?.custom_avatar_url || avatarFromProvider);
-    
-    // Controlla se iscritto alla newsletter (qui potresti fare una chiamata API)
-    setNewsletter(false);
-  }, [user, navigate]);
+
+    setIsCheckingNickname(true);
+
+    // Crea un timer per il debounce (500ms)
+    const timer = setTimeout(() => {
+      checkNicknameAvailability(nickname);
+    }, 500);
+
+    // Pulizia del timer
+    return () => clearTimeout(timer);
+  }, [nickname, initialNickname, user]);
+
+  const checkNicknameAvailability = async (newNickname: string) => {
+    try {
+      const response = await fetch(API_ENDPOINTS.checkNickname, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nickname: newNickname,
+          userId: user?.id,
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (!data.available) {
+        setNicknameError("Questo nickname è già in uso");
+      } else {
+        setNicknameError("");
+      }
+    } catch (error) {
+      console.error('Error checking nickname:', error);
+      setNicknameError("");
+    } finally {
+      setIsCheckingNickname(false);
+    }
+  };
+
+  const handleNicknameChange = (value: string) => {
+    setNickname(value);
+  };
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -110,10 +180,55 @@ const Profile = () => {
   };
 
   const handleSave = async () => {
+    // Controlla se il nickname è vuoto
+    if (!nickname.trim()) {
+      toast({
+        title: "Errore",
+        description: "Il nickname non può essere vuoto",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Controlla se ci sono errori di validazione
+    if (nicknameError) {
+      toast({
+        title: "Errore",
+        description: nicknameError,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
     try {
-      // Qui implementerai l'aggiornamento del profilo
-      // Per ora mostriamo solo un messaggio
+      if (user) {
+        // Salva il profilo nel database del server
+        const profileResponse = await fetch(API_ENDPOINTS.profile, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: user.id,
+            nickname: nickname.trim(),
+            email: user.email,
+          }),
+        });
+
+        if (!profileResponse.ok) {
+          const errorData = await profileResponse.json();
+          throw new Error(errorData.error || "Errore nel salvataggio del profilo");
+        }
+
+        // Salva anche nei metadata di Supabase per retrocompatibilità
+        const { error } = await supabase.auth.updateUser({
+          data: { full_name: nickname.trim() }
+        });
+
+        if (error) throw error;
+
+        // Refresha l'utente
+        await refreshUser();
+      }
       
       // Se newsletter è cambiato, aggiorna la subscription
       if (newsletter && user) {
@@ -122,7 +237,7 @@ const Profile = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             email: user.email,
-            name: nickname,
+            name: nickname.trim(),
           }),
         });
       }
@@ -216,13 +331,27 @@ const Profile = () => {
                   {/* Nickname */}
                   <div className="space-y-2">
                     <Label htmlFor="nickname">Nickname</Label>
-                    <Input
-                      id="nickname"
-                      value={nickname}
-                      onChange={(e) => setNickname(e.target.value)}
-                      className="bg-secondary border-border"
-                      placeholder="Il tuo nickname"
-                    />
+                    <div className="relative">
+                      <Input
+                        id="nickname"
+                        value={nickname}
+                        onChange={(e) => handleNicknameChange(e.target.value)}
+                        className={`bg-secondary border-border ${
+                          nicknameError ? 'border-red-500' : ''
+                        }`}
+                        placeholder="Il tuo nickname"
+                      />
+                      {isCheckingNickname && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                          <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                        </div>
+                      )}
+                    </div>
+                    {nicknameError && (
+                      <p className="text-sm text-red-500 flex items-center gap-1">
+                        <span>⚠</span> {nicknameError}
+                      </p>
+                    )}
                   </div>
 
                   {/* Email (read-only) */}

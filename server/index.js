@@ -173,7 +173,8 @@ const db = new Low(adapter, {
   videos: [], 
   newsletter: [], 
   orders: [],
-  passwordResetTokens: []
+  passwordResetTokens: [],
+  profiles: []
 });
 
 await db.read();
@@ -188,7 +189,8 @@ db.data ||= {
   videos: [], 
   newsletter: [], 
   orders: [],
-  passwordResetTokens: []
+  passwordResetTokens: [],
+  profiles: []
 };
 await db.write();
 
@@ -202,6 +204,115 @@ app.post("/api/upload", upload.single("image"), (req, res) => {
     const fileUrl = `${publicBaseUrl}/uploads/${req.file.filename}`;
     res.json({ url: fileUrl });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Profile endpoints
+app.post("/api/check-nickname", async (req, res) => {
+  try {
+    const { nickname, userId } = req.body;
+    
+    if (!nickname) {
+      return res.status(400).json({ error: "Nickname non fornito" });
+    }
+
+    // Assicuracy che profiles esista
+    if (!db.data.profiles) {
+      db.data.profiles = [];
+      await db.write();
+    }
+
+    // Cerca se il nickname esiste (escludendo l'utente attuale)
+    const exists = db.data.profiles.some(p => 
+      p.nickname.toLowerCase() === nickname.toLowerCase() && 
+      p.user_id !== userId
+    );
+
+    res.json({ available: !exists });
+  } catch (err) {
+    console.error("Error checking nickname:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/profile", async (req, res) => {
+  try {
+    const { user_id, nickname, email } = req.body;
+    
+    if (!user_id || !nickname) {
+      return res.status(400).json({ error: "Dati mancanti" });
+    }
+
+    // Assicuracy che profiles esista
+    if (!db.data.profiles) {
+      db.data.profiles = [];
+      await db.write();
+    }
+
+    // Controlla se il nickname è già in uso
+    const exists = db.data.profiles.some(p => 
+      p.nickname.toLowerCase() === nickname.toLowerCase() && 
+      p.user_id !== user_id
+    );
+
+    if (exists) {
+      return res.status(400).json({ error: "Questo nickname è già in uso" });
+    }
+
+    // Cerca profilo esistente
+    const profileIndex = db.data.profiles.findIndex(p => p.user_id === user_id);
+
+    if (profileIndex >= 0) {
+      // Aggiorna
+      db.data.profiles[profileIndex] = {
+        user_id,
+        nickname,
+        email,
+        updated_at: new Date().toISOString()
+      };
+    } else {
+      // Crea nuovo
+      db.data.profiles.push({
+        user_id,
+        nickname,
+        email,
+        created_at: new Date().toISOString()
+      });
+    }
+
+    await db.write();
+    res.json({ success: true, nickname });
+  } catch (err) {
+    console.error("Error saving profile:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/profile/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    if (!userId) {
+      return res.status(400).json({ error: "User ID non fornito" });
+    }
+
+    // Assicuracy che profiles esista
+    if (!db.data.profiles) {
+      db.data.profiles = [];
+      await db.write();
+    }
+
+    // Cerca il profilo dell'utente
+    const profile = db.data.profiles.find(p => p.user_id === userId);
+
+    if (!profile) {
+      return res.status(404).json({ error: "Profilo non trovato" });
+    }
+
+    res.json(profile);
+  } catch (err) {
+    console.error("Error getting profile:", err);
     res.status(500).json({ error: err.message });
   }
 });
