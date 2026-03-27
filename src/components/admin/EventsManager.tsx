@@ -163,8 +163,26 @@ export default function EventsManager() {
 
     const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
     const isUpperHalf = e.clientY < rect.top + rect.height / 2;
-    setDropTargetIndex(index);
-    setDropPosition(isUpperHalf ? "before" : "after");
+    const currentItems = isReordering ? tempItems : items;
+    let insertIndex = index + (isUpperHalf ? 0 : 1);
+    if (insertIndex > draggedIndex) {
+      insertIndex -= 1;
+    }
+
+    if (insertIndex === draggedIndex) {
+      setDropTargetIndex(null);
+      return;
+    }
+
+    const lastIndex = currentItems.length - 1;
+    if (insertIndex >= lastIndex) {
+      setDropTargetIndex(lastIndex);
+      setDropPosition("after");
+      return;
+    }
+
+    setDropTargetIndex(insertIndex);
+    setDropPosition("before");
   };
 
   const handleDrop = async () => {
@@ -470,7 +488,7 @@ export default function EventsManager() {
                   setDropTargetIndex(null);
                 }}
                 className={`reorder-item flex items-center justify-between bg-background/50 hover:bg-background/80 p-4 rounded-lg border border-border transition-colors group ${
-                  draggedIndex === index ? "reorder-item-source-hidden" : ""
+                  draggedIndex === index && dropTargetIndex !== null ? "reorder-item-ghost" : ""
                 } ${isReordering ? "cursor-move" : ""}`}
               >
               <div className="flex items-center gap-4 flex-1">

@@ -232,8 +232,25 @@ export default function ScheduleManager() {
 
     const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
     const isUpperHalf = e.clientY < rect.top + rect.height / 2;
-    setDropTargetIndex(index);
-    setDropPosition(isUpperHalf ? "before" : "after");
+    let insertIndex = index + (isUpperHalf ? 0 : 1);
+    if (insertIndex > draggedIndex) {
+      insertIndex -= 1;
+    }
+
+    if (insertIndex === draggedIndex) {
+      setDropTargetIndex(null);
+      return;
+    }
+
+    const lastIndex = scheduleItems.length - 1;
+    if (insertIndex >= lastIndex) {
+      setDropTargetIndex(lastIndex);
+      setDropPosition("after");
+      return;
+    }
+
+    setDropTargetIndex(insertIndex);
+    setDropPosition("before");
   };
 
   const persistReorder = async (nextItems: ScheduleItem[]) => {
@@ -498,7 +515,7 @@ export default function ScheduleManager() {
                       setDraggedIndex(null);
                       setDropTargetIndex(null);
                     }}
-                    className={`reorder-item flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 md:p-4 bg-secondary/50 rounded-lg cursor-move hover:bg-secondary transition-colors group ${draggedIndex === index ? "reorder-item-source-hidden" : ""}`}
+                    className={`reorder-item flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 md:p-4 bg-secondary/50 rounded-lg cursor-move hover:bg-secondary transition-colors group ${draggedIndex === index && dropTargetIndex !== null ? "reorder-item-ghost" : ""}`}
                   >
                   <div className="flex items-center gap-3 flex-1">
                     <GripVertical className="h-4 w-4 md:h-5 md:w-5 text-muted-foreground hidden sm:block flex-shrink-0" />
