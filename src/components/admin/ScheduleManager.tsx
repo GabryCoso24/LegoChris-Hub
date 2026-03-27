@@ -231,7 +231,7 @@ export default function ScheduleManager() {
     if (draggedIndex === null || draggedIndex === index) return;
 
     const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-    const isUpperHalf = e.clientY < rect.top + rect.height / 2;
+    const isUpperHalf = e.clientY < rect.top + rect.height * 0.35;
     let insertIndex = index + (isUpperHalf ? 0 : 1);
     if (insertIndex > draggedIndex) {
       insertIndex -= 1;

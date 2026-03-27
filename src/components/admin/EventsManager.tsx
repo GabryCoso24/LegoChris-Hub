@@ -42,6 +42,15 @@ export default function EventsManager() {
   const [selectedMinute, setSelectedMinute] = useState<string>("00");
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
 
+  const toLocalDateTimeValue = (date: Date) => {
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
+    const day = date.getDate().toString().padStart(2, "0");
+    const hours = date.getHours().toString().padStart(2, "0");
+    const minutes = date.getMinutes().toString().padStart(2, "0");
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
   const uploadImage = async (file: File) => {
     const formData = new FormData();
     formData.append("image", file);
@@ -162,7 +171,7 @@ export default function EventsManager() {
     if (draggedIndex === null || draggedIndex === index) return;
 
     const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-    const isUpperHalf = e.clientY < rect.top + rect.height / 2;
+    const isUpperHalf = e.clientY < rect.top + rect.height * 0.35;
     const currentItems = isReordering ? tempItems : items;
     let insertIndex = index + (isUpperHalf ? 0 : 1);
     if (insertIndex > draggedIndex) {
@@ -333,7 +342,7 @@ export default function EventsManager() {
                       if (date) {
                         const dateTime = new Date(date);
                         dateTime.setHours(parseInt(selectedHour), parseInt(selectedMinute));
-                        setForm((f) => ({ ...f, date: dateTime.toISOString().slice(0, 16) }));
+                        setForm((f) => ({ ...f, date: toLocalDateTimeValue(dateTime) }));
                       }
                       setDatePopoverOpen(false);
                     }}
@@ -351,7 +360,7 @@ export default function EventsManager() {
                       if (selectedDate) {
                         const dateTime = new Date(selectedDate);
                         dateTime.setHours(parseInt(value), parseInt(selectedMinute));
-                        setForm((f) => ({ ...f, date: dateTime.toISOString().slice(0, 16) }));
+                        setForm((f) => ({ ...f, date: toLocalDateTimeValue(dateTime) }));
                       }
                     }}
                   >
@@ -374,7 +383,7 @@ export default function EventsManager() {
                       if (selectedDate) {
                         const dateTime = new Date(selectedDate);
                         dateTime.setHours(parseInt(selectedHour), parseInt(value));
-                        setForm((f) => ({ ...f, date: dateTime.toISOString().slice(0, 16) }));
+                        setForm((f) => ({ ...f, date: toLocalDateTimeValue(dateTime) }));
                       }
                     }}
                   >
