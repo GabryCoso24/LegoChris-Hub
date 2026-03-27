@@ -6,6 +6,22 @@ const rawApiUrl = import.meta.env.VITE_API_URL || "";
 export const API_URL = rawApiUrl.endsWith("/") ? rawApiUrl.slice(0, -1) : rawApiUrl;
 
 export const API_ENDPOINTS = {
+  botConfig: `${API_URL}/api/bot/config`,
+  botStatus: `${API_URL}/api/bot/status`,
+  botStart: `${API_URL}/api/bot/start`,
+  botStop: `${API_URL}/api/bot/stop`,
+  botRestart: `${API_URL}/api/bot/restart`,
+  botLogs: `${API_URL}/api/bot/logs`,
+  botLogsStream: `${API_URL}/api/bot/logs/stream`,
+  botFiles: `${API_URL}/api/bot/files`,
+  botFile: `${API_URL}/api/bot/file`,
+  botFileRename: `${API_URL}/api/bot/file/rename`,
+  botTerminalExec: `${API_URL}/api/bot/terminal/exec`,
+  botModules: `${API_URL}/api/bot/modules`,
+  botBuilderFlows: `${API_URL}/api/bot/builder/flows`,
+  botBuilderDeleteFlow: `${API_URL}/api/bot/builder/flows`,
+  botBuilderCompile: `${API_URL}/api/bot/builder/compile`,
+  botBuilderSaveSource: `${API_URL}/api/bot/builder/save-source`,
   videos: `${API_URL}/api/videos`,
   videosReorder: `${API_URL}/api/videos/reorder`,
   playlists: `${API_URL}/api/playlists`,

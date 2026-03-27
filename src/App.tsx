@@ -49,6 +49,49 @@ function ScrollToTop() {
   return null;
 }
 
+function PreventScrollLockShift() {
+  useEffect(() => {
+    const clearScrollCompensation = () => {
+      const html = document.documentElement;
+      const body = document.body;
+
+      html.removeAttribute("data-scroll-locked");
+      body.removeAttribute("data-scroll-locked");
+
+      body.classList.remove("with-scroll-bars-hidden", "right-scroll-bar-position", "width-before-scroll-bar");
+
+      body.style.removeProperty("padding-right");
+      body.style.removeProperty("margin-right");
+      body.style.removeProperty("overflow");
+      body.style.setProperty("--removed-body-scroll-bar-size", "0px");
+
+      html.style.removeProperty("padding-right");
+      html.style.removeProperty("margin-right");
+      html.style.removeProperty("overflow");
+    };
+
+    clearScrollCompensation();
+
+    const observer = new MutationObserver(() => {
+      clearScrollCompensation();
+    });
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["style", "class", "data-scroll-locked"],
+    });
+
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["style", "class", "data-scroll-locked"],
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  return null;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -56,6 +99,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <ScrollToTop />
+        <PreventScrollLockShift />
         <AuthProvider>
           <CartProvider>
             <Routes>

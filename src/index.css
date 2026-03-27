@@ -100,6 +100,48 @@
   
   html {
     overflow-y: scroll;
+    scrollbar-gutter: stable;
+  }
+
+  body {
+    overflow-x: hidden;
+  }
+
+  html[data-scroll-locked],
+  body[data-scroll-locked] {
+    scrollbar-gutter: stable;
+    padding-right: 0 !important;
+    margin-right: 0 !important;
+    --removed-body-scroll-bar-size: 0px !important;
+  }
+
+  html:has(body[data-scroll-locked]) {
+    overflow-y: scroll !important;
+    scrollbar-gutter: stable;
+  }
+
+  html[data-scroll-locked] {
+    overflow-y: scroll !important;
+  }
+
+  body[data-scroll-locked] {
+    overflow-y: scroll !important;
+  }
+
+  body.with-scroll-bars-hidden {
+    overflow-y: scroll !important;
+    padding-right: 0 !important;
+    margin-right: 0 !important;
+    --removed-body-scroll-bar-size: 0px !important;
+  }
+
+  .right-scroll-bar-position,
+  .width-before-scroll-bar,
+  [data-radix-scroll-lock-wrapper] {
+    right: 0 !important;
+    margin-right: 0 !important;
+    padding-right: 0 !important;
+    width: 100% !important;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -333,6 +375,88 @@
 
   .scrollbar-track-transparent::-webkit-scrollbar-track {
     background: transparent;
+  }
+
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(25 100% 55% / 0.35) hsl(220 15% 12% / 0.5);
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: hsl(220 15% 12% / 0.45);
+    border-radius: 9999px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, hsl(25 100% 58% / 0.8), hsl(18 95% 56% / 0.75));
+    border-radius: 9999px;
+    border: 2px solid hsl(220 15% 12% / 0.45);
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, hsl(28 100% 62% / 0.95), hsl(20 95% 58% / 0.9));
+  }
+
+  .discord-panel-shell {
+    --editor-keyword: #60a5fa;
+    --editor-string: #22c55e;
+    --editor-number: #f59e0b;
+    --editor-comment: #94a3b8;
+    --editor-type: #c084fc;
+  }
+
+  .discord-panel-shell .discord-surface {
+    border-radius: 1.35rem;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 16px 40px hsl(0 0% 0% / 0.12);
+  }
+
+  .discord-panel-shell .discord-soft {
+    border-radius: 1rem;
+  }
+
+  .discord-editor-token-base {
+    color: hsl(var(--foreground));
+  }
+
+  .discord-editor-token-keyword {
+    color: var(--editor-keyword);
+    font-weight: 600;
+  }
+
+  .discord-editor-token-string {
+    color: var(--editor-string);
+  }
+
+  .discord-editor-token-number {
+    color: var(--editor-number);
+  }
+
+  .discord-editor-token-comment {
+    color: var(--editor-comment);
+    font-style: italic;
+  }
+
+  .discord-editor-token-type {
+    color: var(--editor-type);
+  }
+
+  .custom-menu-select {
+    appearance: none;
+    background-image:
+      linear-gradient(45deg, transparent 50%, hsl(25 100% 60%) 50%),
+      linear-gradient(135deg, hsl(25 100% 60%) 50%, transparent 50%);
+    background-position:
+      calc(100% - 14px) calc(50% - 2px),
+      calc(100% - 8px) calc(50% - 2px);
+    background-size: 6px 6px, 6px 6px;
+    background-repeat: no-repeat;
+    padding-right: 1.9rem;
   }
 
   /* Snap scrolling for mobile */

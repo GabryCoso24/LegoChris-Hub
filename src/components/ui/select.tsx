@@ -4,7 +4,17 @@ import { Check, ChevronDown, ChevronUp } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-const Select = SelectPrimitive.Root;
+function Select({
+  children,
+  modal,
+  ...props
+}: React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root>) {
+  return (
+    <SelectPrimitive.Root {...props} modal={modal ?? false}>
+      {children}
+    </SelectPrimitive.Root>
+  );
+}
 
 const SelectGroup = SelectPrimitive.Group;
 

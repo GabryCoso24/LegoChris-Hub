@@ -9,6 +9,7 @@ import VideosManager from "@/components/admin/VideosManager";
 import EventsManager from "@/components/admin/EventsManager";
 import ScheduleManager from "@/components/admin/ScheduleManager";
 import OrdersManager from "@/components/admin/OrdersManager";
+import DiscordBotManager from "@/components/admin/DiscordBotManager";
 import { NewsletterManager } from "@/components/admin/NewsletterManager";
 import { Lock, LogOut } from "lucide-react";
 
@@ -21,6 +22,7 @@ const tabs = [
   { key: "schedule", label: "Schedule" },
   { key: "playlists", label: "Playlists" },
   { key: "videos", label: "Video Recenti" },
+  { key: "discord-bot", label: "Discord Bot" },
   { key: "newsletter", label: "Newsletter" },
 ];
 
@@ -116,7 +118,7 @@ export default function Admin() {
   return (
     <Layout>
       <ParticleBackground />
-      <div className="container mx-auto px-4 pt-32 pb-12 min-h-screen">
+      <div className="mx-auto w-full max-w-[1900px] px-4 pt-32 pb-12 min-h-screen">
         <div className="flex items-center justify-between mb-8 gap-4">
           <div>
             <h1 className="text-3xl md:text-4xl font-display font-bold mb-2">Admin Panel</h1>
@@ -155,6 +157,7 @@ export default function Admin() {
           {active === "shop" && <ShopManager />}
           {active === "playlists" && <PlaylistManager />}
           {active === "videos" && <VideosManager />}
+          {active === "discord-bot" && <DiscordBotManager />}
           {active === "newsletter" && <NewsletterManager />}
         </div>
       </div>

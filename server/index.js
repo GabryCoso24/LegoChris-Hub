@@ -11,6 +11,7 @@ import nodemailer from "nodemailer";
 import Stripe from "stripe";
 import crypto from "crypto";
 import os from "os";
+import { spawn } from "child_process";
 import { welcomeEmail, passwordResetEmail, orderReceiptEmail, newsletterEmail, orderStatusUpdateEmail, adminNewOrderEmail } from "./emailTemplates.js";
 import { custom } from "zod";
 
@@ -196,7 +197,10 @@ const db = new Low(adapter, {
   newsletter: [], 
   orders: [],
   passwordResetTokens: [],
-  profiles: []
+  profiles: [],
+  bot_modules: {},
+  bot_builder_flows: [],
+  bot_config: {}
 });
 
 await db.read();
@@ -212,9 +216,816 @@ db.data ||= {
   newsletter: [], 
   orders: [],
   passwordResetTokens: [],
-  profiles: []
+  profiles: [],
+  bot_modules: {},
+  bot_builder_flows: [],
+  bot_config: {}
 };
+db.data.bot_modules ||= {};
+db.data.bot_builder_flows ||= [];
+db.data.bot_config ||= {};
 await db.write();
+
+// Discord Bot Control Panel - foundation
+const defaultBotRootPath = path.resolve(process.env.BOT_ROOT_PATH || path.join(__dirname, "../discord-bot"));
+const defaultBotEntryScript = process.env.BOT_ENTRY_SCRIPT || "bot.py";
+const defaultBotPythonCommand = process.env.BOT_PYTHON_COMMAND || "python";
+const defaultPm2ProcessName = process.env.BOT_PM2_PROCESS_NAME || "legochris-discord-bot";
+const maxTerminalOutputBytes = Number(process.env.BOT_TERMINAL_OUTPUT_LIMIT || 200000);
+const commandTimeoutMs = Number(process.env.BOT_COMMAND_TIMEOUT_MS || 60000);
+
+const botLogBuffer = [];
+const botLogSubscribers = new Set();
+
+function pushBotLog(level, message) {
+  const entry = {
+    ts: new Date().toISOString(),
+    level,
+    message: String(message || "").trimEnd(),
+  };
+  botLogBuffer.push(entry);
+  if (botLogBuffer.length > 2000) {
+    botLogBuffer.shift();
+  }
+  for (const res of botLogSubscribers) {
+    res.write(`data: ${JSON.stringify(entry)}\n\n`);
+  }
+}
+
+function getBotConfig() {
+  const saved = db.data?.bot_config || {};
+  return {
+    rootPath: path.resolve(saved.rootPath || defaultBotRootPath),
+    entryScript: saved.entryScript || defaultBotEntryScript,
+    pythonCommand: saved.pythonCommand || defaultBotPythonCommand,
+    pm2ProcessName: saved.pm2ProcessName || defaultPm2ProcessName,
+  };
+}
+
+function ensureBotRootExists(config) {
+  if (!fs.existsSync(config.rootPath)) {
+    throw new Error(`BOT root not found: ${config.rootPath}`);
+  }
+}
+
+function resolveSandboxPath(config, relativePath = ".") {
+  ensureBotRootExists(config);
+  const normalized = String(relativePath || ".").replace(/\\/g, "/");
+  const resolved = path.resolve(config.rootPath, normalized);
+  if (resolved !== config.rootPath && !resolved.startsWith(`${config.rootPath}${path.sep}`)) {
+    throw new Error("Path escapes bot root sandbox");
+  }
+  return resolved;
+}
+
+function relFromBotRoot(config, absolutePath) {
+  const rel = path.relative(config.rootPath, absolutePath).replace(/\\/g, "/");
+  return rel === "" ? "." : rel;
+}
+
+function runCommand(command, args = [], options = {}) {
+  const cwd = options.cwd || process.cwd();
+  const timeout = options.timeoutMs || commandTimeoutMs;
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      shell: true,
+      windowsHide: true,
+    });
+
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGKILL");
+    }, timeout);
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+      if (stdout.length > maxTerminalOutputBytes) {
+        stdout = `${stdout.slice(-maxTerminalOutputBytes)}\n...[truncated]`;
+      }
+    });
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+      if (stderr.length > maxTerminalOutputBytes) {
+        stderr = `${stderr.slice(-maxTerminalOutputBytes)}\n...[truncated]`;
+      }
+    });
+
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+
+    child.on("close", (code, signal) => {
+      clearTimeout(timer);
+      resolve({ code, signal, stdout, stderr, timedOut });
+    });
+  });
+}
+
+function extractPm2Json(stdout) {
+  const start = stdout.indexOf("[");
+  const end = stdout.lastIndexOf("]");
+  if (start === -1 || end === -1 || end <= start) {
+    return [];
+  }
+  const raw = stdout.slice(start, end + 1);
+  return JSON.parse(raw);
+}
+
+async function getPm2ProcessInfo(config) {
+  const result = await runCommand("pm2", ["jlist"], { cwd: config.rootPath, timeoutMs: 15000 });
+  if (result.code !== 0) {
+    return {
+      pm2Available: false,
+      pm2Error: result.stderr || result.stdout || "pm2 command failed",
+      process: null,
+    };
+  }
+
+  let list = [];
+  try {
+    list = extractPm2Json(result.stdout || "[]");
+  } catch {
+    list = [];
+  }
+
+  const processInfo = list.find((p) => p.name === config.pm2ProcessName) || null;
+  return {
+    pm2Available: true,
+    pm2Error: null,
+    process: processInfo,
+  };
+}
+
+async function getBotStatus() {
+  const config = getBotConfig();
+  const info = await getPm2ProcessInfo(config);
+  const proc = info.process;
+  const pm2Status = proc?.pm2_env?.status || "stopped";
+  const running = pm2Status === "online";
+
+  return {
+    running,
+    pid: proc?.pid || proc?.pid_id || null,
+    startedAt: proc?.pm2_env?.pm_uptime || null,
+    uptimeMs: proc?.pm2_env?.pm_uptime ? Date.now() - proc.pm2_env.pm_uptime : 0,
+    rootPath: config.rootPath,
+    entryScript: config.entryScript,
+    pythonCommand: config.pythonCommand,
+    pm2ProcessName: config.pm2ProcessName,
+    pm2Installed: info.pm2Available,
+    pm2Status,
+    pm2Error: info.pm2Error,
+    processDetected: Boolean(proc),
+  };
+}
+
+async function startBotProcess() {
+  const config = getBotConfig();
+  ensureBotRootExists(config);
+
+  const entryPath = resolveSandboxPath(config, config.entryScript);
+  if (!fs.existsSync(entryPath)) {
+    throw new Error(`Bot entry script not found: ${entryPath}`);
+  }
+
+  const status = await getBotStatus();
+  if (status.running) {
+    return { ...status, alreadyRunning: true };
+  }
+
+  const cmdArgs = [
+    "start",
+    entryPath,
+    "--name",
+    config.pm2ProcessName,
+    "--interpreter",
+    config.pythonCommand,
+    "--cwd",
+    config.rootPath,
+  ];
+  const result = await runCommand("pm2", cmdArgs, { cwd: config.rootPath, timeoutMs: 30000 });
+
+  if (result.code !== 0) {
+    throw new Error(result.stderr || result.stdout || "Unable to start process with pm2");
+  }
+
+  pushBotLog("info", `PM2 start: ${config.pm2ProcessName}`);
+  if (result.stdout) pushBotLog("stdout", result.stdout);
+
+  return getBotStatus();
+}
+
+async function stopBotProcess(force = false) {
+  const config = getBotConfig();
+  const action = force ? "delete" : "stop";
+  const result = await runCommand("pm2", [action, config.pm2ProcessName], {
+    cwd: config.rootPath,
+    timeoutMs: 30000,
+  });
+
+  if (result.code !== 0 && !String(result.stderr || "").toLowerCase().includes("not found")) {
+    throw new Error(result.stderr || result.stdout || `Unable to ${action} process`);
+  }
+
+  pushBotLog("info", `PM2 ${action}: ${config.pm2ProcessName}`);
+  if (result.stdout) pushBotLog("stdout", result.stdout);
+  return { stopped: true, ...(await getBotStatus()) };
+}
+
+async function restartBotProcess() {
+  const config = getBotConfig();
+  const status = await getBotStatus();
+
+  if (!status.processDetected) {
+    return startBotProcess();
+  }
+
+  const result = await runCommand("pm2", ["restart", config.pm2ProcessName], {
+    cwd: config.rootPath,
+    timeoutMs: 30000,
+  });
+  if (result.code !== 0) {
+    throw new Error(result.stderr || result.stdout || "Unable to restart process with pm2");
+  }
+
+  pushBotLog("info", `PM2 restart: ${config.pm2ProcessName}`);
+  if (result.stdout) pushBotLog("stdout", result.stdout);
+  return getBotStatus();
+}
+
+async function getPm2LogEntries(limit = 200) {
+  const safeLimit = Math.max(1, Math.min(2000, Number(limit) || 200));
+  const config = getBotConfig();
+
+  const status = await getBotStatus();
+  if (!status.pm2Installed) {
+    return botLogBuffer.slice(-safeLimit);
+  }
+
+  const result = await runCommand(
+    "pm2",
+    ["logs", config.pm2ProcessName, "--lines", String(safeLimit), "--nostream"],
+    { cwd: config.rootPath, timeoutMs: 25000 }
+  );
+
+  if (result.code !== 0) {
+    const stderr = String(result.stderr || result.stdout || "").toLowerCase();
+    if (stderr.includes("not found") || stderr.includes("does not exist")) {
+      return [];
+    }
+    return botLogBuffer.slice(-safeLimit);
+  }
+
+  const rawLines = String(result.stdout || "")
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => line && !line.includes("[TAILING]") && !line.includes("timestamp format"));
+
+  const parsed = rawLines.slice(-safeLimit).map((line) => {
+    const levelMatch = line.match(/\b(error|warn|warning|info|debug)\b/i);
+    const clean = line.replace(/^\d+\|[^|]+\|\s*/, "").trim();
+    return {
+      ts: new Date().toISOString(),
+      level: (levelMatch?.[1] || "info").toLowerCase(),
+      message: clean || line,
+    };
+  });
+
+  return parsed;
+}
+
+async function listDirectory(config, relativePath = ".") {
+  const dir = resolveSandboxPath(config, relativePath);
+  const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+  const mapped = await Promise.all(
+    entries.map(async (entry) => {
+      const abs = path.join(dir, entry.name);
+      const stats = await fs.promises.stat(abs);
+      return {
+        name: entry.name,
+        path: relFromBotRoot(config, abs),
+        type: entry.isDirectory() ? "dir" : "file",
+        size: stats.size,
+        mtime: stats.mtime.toISOString(),
+      };
+    })
+  );
+
+  mapped.sort((a, b) => {
+    if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+  return mapped;
+}
+
+async function scanCogs(config) {
+  const cogsDir = resolveSandboxPath(config, "cogs");
+  if (!fs.existsSync(cogsDir)) {
+    return [];
+  }
+  const modules = [];
+
+  async function walk(relativeDir = "") {
+    const absDir = path.join(cogsDir, relativeDir);
+    const files = await fs.promises.readdir(absDir, { withFileTypes: true });
+    for (const entry of files) {
+      if (entry.name === "__pycache__") continue;
+      if (entry.isDirectory()) {
+        await walk(path.join(relativeDir, entry.name));
+        continue;
+      }
+      if (!entry.isFile() || !entry.name.endsWith(".py") || entry.name === "__init__.py") continue;
+      const noExt = entry.name.replace(/\.py$/, "");
+      const rel = path.join(relativeDir, noExt).replace(/\\/g, ".");
+      modules.push(rel || noExt);
+    }
+  }
+
+  await walk("");
+  return modules.sort((a, b) => a.localeCompare(b));
+}
+
+function sanitizeCogName(value, fallback = "generated_command") {
+  return String(value || fallback)
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "") || fallback;
+}
+
+function normalizeCogRelativePath(relativePath, fallbackName = "generated_command") {
+  const fallbackFile = `cogs/generated/${sanitizeCogName(fallbackName)}.py`;
+  const raw = String(relativePath || "").trim().replace(/\\/g, "/");
+  let normalized = raw || fallbackFile;
+  normalized = normalized.replace(/^\/+/, "");
+  if (!normalized.startsWith("cogs/")) {
+    normalized = `cogs/${normalized}`;
+  }
+  if (!normalized.endsWith(".py")) {
+    normalized = `${normalized}.py`;
+  }
+  normalized = normalized.replace(/\/+/g, "/");
+  if (normalized.endsWith("/__init__.py") || normalized === "cogs/__init__.py") {
+    throw new Error("Il builder non puo salvare su __init__.py");
+  }
+  return normalized;
+}
+
+function relativeCogPathToModuleName(relativePath) {
+  const normalized = String(relativePath || "").replace(/\\/g, "/");
+  if (!normalized.startsWith("cogs/") || !normalized.endsWith(".py")) {
+    return null;
+  }
+  const withoutPrefix = normalized.slice("cogs/".length, -".py".length);
+  if (!withoutPrefix || withoutPrefix.endsWith("/__init__")) {
+    return null;
+  }
+  return withoutPrefix.split("/").filter(Boolean).join(".");
+}
+
+function generateNodeBody(node) {
+  const config = typeof node?.config === "object" && node.config ? node.config : {};
+  const value = String(node.payload || "").replace(/"""/g, "'''");
+  switch (node.type) {
+    case "log_console":
+      return `print(self._render_template("""${value || "log"}""", variables))\n`;
+    case "variable_set": {
+      const variableName = String(config.variableName || value || "new_variable").replace(/"""/g, "'''");
+      const variableType = String(config.valueType || "string").replace(/"""/g, "'''");
+      const variableValue = String(config.value || "").replace(/"""/g, "'''");
+      return `variables["""${variableName}"""] = self._coerce_literal("""${variableValue}""", """${variableType}""", variables)\n`;
+    }
+    case "json_save": {
+      const filePath = String(config.filePath || value || "data/settings.json").replace(/"""/g, "'''");
+      const variableName = String(config.variableName || "").replace(/"""/g, "'''");
+      return `json_target = variables.get("""${variableName}""") if """${variableName}""" else variables\nawait self._save_json(self._render_template("""${filePath}""", variables), json_target)\n`;
+    }
+    case "json_load": {
+      const filePath = String(config.filePath || value || "data/settings.json").replace(/"""/g, "'''");
+      const targetVariable = String(config.targetVariable || "loaded_data").replace(/"""/g, "'''");
+      return `variables["""${targetVariable}"""] = await self._load_json(self._render_template("""${filePath}""", variables))\n`;
+    }
+    case "send_message":
+      return `await self._send_text(target, self._render_template("""${value || "message"}""", variables))\n`;
+    case "send_embed": {
+      const description = String(config.description || value || "embed").replace(/"""/g, "'''");
+      const title = String(config.title || "").replace(/"""/g, "'''");
+      const color = String(config.color || "").replace(/"""/g, "'''");
+      const url = String(config.url || "").replace(/"""/g, "'''");
+      const footer = String(config.footer || "").replace(/"""/g, "'''");
+      const footerIcon = String(config.footerIconUrl || "").replace(/"""/g, "'''");
+      const authorName = String(config.authorName || "").replace(/"""/g, "'''");
+      const authorIcon = String(config.authorIconUrl || "").replace(/"""/g, "'''");
+      const authorUrl = String(config.authorUrl || "").replace(/"""/g, "'''");
+      const thumbnailUrl = String(config.thumbnailUrl || "").replace(/"""/g, "'''");
+      const imageUrl = String(config.imageUrl || "").replace(/"""/g, "'''");
+      const fieldsJson = String(config.fieldsJson || "[]").replace(/"""/g, "'''");
+      const timestampMode = String(config.timestampMode || (String(config.timestamp || "false").toLowerCase() === "true" ? "auto" : "none")).replace(/"""/g, "'''");
+      const timestampValue = String(config.timestampValue || "").replace(/"""/g, "'''");
+      return `embed = discord.Embed(\n    title=self._render_template("""${title}""", variables) or None,\n    description=self._render_template("""${description}""", variables) or None,\n    color=self._parse_embed_color(self._render_template("""${color}""", variables)),\n    url=self._render_template("""${url}""", variables) or None,\n)\nself._apply_embed_author(embed, variables, """${authorName}""", """${authorIcon}""", """${authorUrl}""")\nself._apply_embed_footer(embed, variables, """${footer}""", """${footerIcon}""")\nself._apply_embed_media(embed, variables, """${thumbnailUrl}""", """${imageUrl}""")\nself._apply_embed_fields(embed, variables, """${fieldsJson}""")\nself._apply_embed_timestamp(embed, variables, """${timestampMode}""", """${timestampValue}""")\nawait self._send_embed(target, embed)\n`;
+    }
+    case "add_role":
+    case "remove_role": {
+      const action = node.type === "add_role" ? "add_roles" : "remove_roles";
+      const roleName = String(config.roleName || value || "role").replace(/"""/g, "'''");
+      const targetType = String(config.targetType || "author").replace(/"""/g, "'''");
+      const targetVariable = String(config.targetVariable || "").replace(/"""/g, "'''");
+      return `role_name = self._render_template("""${roleName}""", variables)\nguild = self._get_guild(target)\nmember = await self._resolve_member_target(target, variables, """${targetType}""", """${targetVariable}""")\nrole = self._resolve_role(guild, role_name)\nif role and member:\n    await member.${action}(role)\n`;
+    }
+    case "condition_text_contains":
+      return `content = self._get_content(target)\nif self._render_template("""${value || ""}""", variables) not in content:\n    return\n`;
+    case "condition_select": {
+      const options = value
+        .split("|")
+        .map((item) => item.trim())
+        .filter(Boolean);
+      if (options.length === 0) {
+        return "";
+      }
+      const clauses = options
+        .map((item, index) => {
+          const escaped = item.replace(/"""/g, "'''");
+          return index === 0
+            ? `if self._render_template("""${escaped}""", variables) in content:\n    pass\n`
+            : `elif self._render_template("""${escaped}""", variables) in content:\n    pass\n`;
+        })
+        .join("");
+      return `content = self._get_content(target)\n${clauses}else:\n    return\n`;
+    }
+    case "loop_count": {
+      const parsed = Number.parseInt(value, 10);
+      const count = Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 25) : 3;
+      return `for _ in range(${count}):\n    await self._send_text(target, self._render_template("""Loop step""", variables))\n`;
+    }
+    case "function_call": {
+      const functionName = (value || "custom_flow")
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, "") || "custom_flow";
+      const assignTo = String(config.assignTo || "").replace(/"""/g, "'''");
+      return `fn = getattr(self, "${functionName}", None)\nif callable(fn):\n    result = await fn(target, variables)\n    self._store_return_values(variables, """${assignTo}""", result)\n`;
+    }
+    case "function_define":
+      return "";
+    case "return_values": {
+      const values = String(config.values || value || "").replace(/"""/g, "'''");
+      return `return self._resolve_return_values("""${values}""", variables)\n`;
+    }
+    case "call_existing_command": {
+      const commandName = (value || "help")
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, "") || "help";
+      return `invoked = await self._invoke_prefixed_command(target, "${commandName}")\nif not invoked:\n    await self._send_text(target, """Il comando ${commandName} richiede un contesto prefix""")\n`;
+    }
+    default:
+      return "";
+  }
+}
+
+function buildNodeSequence(nodes, edges, startNodeId = null) {
+  const byId = new Map((nodes || []).map((n) => [String(n.id), n]));
+  const outgoing = new Map();
+  for (const edge of edges || []) {
+    const from = String(edge.from);
+    const to = String(edge.to);
+    if (!outgoing.has(from)) outgoing.set(from, []);
+    outgoing.get(from).push(to);
+  }
+
+  const trigger = startNodeId
+    ? byId.get(String(startNodeId))
+    : (nodes || []).find((n) => n.type === "trigger_command") || (nodes || [])[0];
+  if (!trigger) return [];
+
+  const visited = new Set();
+  const sequence = [];
+  let current = String(trigger.id);
+  while (current && !visited.has(current)) {
+    visited.add(current);
+    const node = byId.get(current);
+    if (!node) break;
+    sequence.push(node);
+    const nextList = outgoing.get(current) || [];
+    current = nextList[0] || "";
+  }
+  return sequence;
+}
+
+async function compileFlowToCog(config, flow, options = {}) {
+  const writeToDisk = options.writeToDisk !== false;
+  const safeName = sanitizeCogName(flow.name || "generated_command");
+  const targetRelativePath = normalizeCogRelativePath(options.outputPath || flow.targetPath, safeName);
+  const targetModule = relativeCogPathToModuleName(targetRelativePath);
+  const outPath = resolveSandboxPath(config, targetRelativePath);
+  if (writeToDisk) {
+    await fs.promises.mkdir(path.dirname(outPath), { recursive: true });
+  }
+
+  const nodes = Array.isArray(flow.nodes) ? flow.nodes : [];
+  const edges = Array.isArray(flow.edges) ? flow.edges : [];
+  const sequence = buildNodeSequence(nodes, edges);
+  const triggerNode = sequence.find((n) => n.type === "trigger_command");
+  const effectiveCommand = String(triggerNode?.payload || flow.command || safeName)
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, "") || "generated";
+  const triggerPrefix = String(triggerNode?.prefix || "/") === "!" ? "!" : "/";
+  const commandHandlerName = effectiveCommand
+    .replace(/[^a-z0-9_]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "") || "generated";
+  const isSlashCommand = triggerPrefix === "/";
+  const decorator = isSlashCommand
+    ? `@app_commands.command(name="${effectiveCommand}")`
+    : `@commands.command(name="${effectiveCommand}")`;
+  const commandParameter = isSlashCommand ? "interaction: discord.Interaction" : "ctx";
+  const commandTarget = isSlashCommand ? "interaction" : "ctx";
+
+  const bodyFromNodes = sequence
+    .filter((n) => n.type !== "trigger_command" && n.type !== "function_define")
+    .map((n) => generateNodeBody(n))
+    .join("");
+
+  const indentBlock = (code, spaces = 8) => {
+    const pad = " ".repeat(spaces);
+    return String(code || "")
+      .split("\n")
+      .map((line) => (line.length ? `${pad}${line}` : ""))
+      .join("\n");
+  };
+
+  const functionNodes = nodes.filter((n) => n.type === "function_define");
+  const functionMethods = functionNodes
+    .map((n) => {
+      const fnName = String(n.payload || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, "_")
+        .replace(/_+/g, "_")
+        .replace(/^_|_$/g, "") || "custom_flow";
+      const fnSequence = buildNodeSequence(nodes, edges, n.id)
+        .filter((item) => item.id !== n.id && item.type !== "function_define");
+      const fnBody = fnSequence.map((item) => generateNodeBody(item)).join("") || "return None\n";
+      return `\n    async def ${fnName}(self, target, variables=None):\n        if variables is None:\n            variables = {}\n${indentBlock(fnBody, 8)}\n`;
+    })
+    .join("");
+
+  const fallbackMessage = String(flow.message || "Command executed").replace(/"""/g, "'''");
+  const body = bodyFromNodes || `print("""Avvio comando ${effectiveCommand} avvenuto""")\nawait self._send_text(target, """${fallbackMessage}""")\n`;
+  const commandBody = indentBlock(body, 8);
+
+  const className = `${safeName[0].toUpperCase() + safeName.slice(1)}Cog`;
+  const runtimeHelpers = `
+    async def _send_text(self, target, message):
+        if isinstance(target, discord.Interaction):
+            if target.response.is_done():
+                await target.followup.send(message)
+            else:
+                await target.response.send_message(message)
+            return
+        await target.send(message)
+
+    async def _send_embed(self, target, embed):
+        if isinstance(target, discord.Interaction):
+            if target.response.is_done():
+                await target.followup.send(embed=embed)
+            else:
+                await target.response.send_message(embed=embed)
+            return
+        await target.send(embed=embed)
+
+    def _get_guild(self, target):
+        return getattr(target, "guild", None)
+
+    def _get_author(self, target):
+        if isinstance(target, discord.Interaction):
+            return getattr(target, "user", None)
+        return getattr(target, "author", None)
+
+    def _get_content(self, target):
+        message = getattr(target, "message", None)
+        if message and getattr(message, "content", None):
+            return message.content
+        data = getattr(target, "data", None)
+        if isinstance(data, dict):
+            options = data.get("options") or []
+            values = []
+            for option in options:
+                if isinstance(option, dict) and option.get("value") is not None:
+                    values.append(str(option["value"]))
+            return " ".join(values)
+        return ""
+
+    def _render_template(self, value, variables):
+        rendered = str(value or "")
+        for key, item in (variables or {}).items():
+            rendered = rendered.replace(f"{{{{{key}}}}}", str(item))
+        return rendered
+
+    def _parse_embed_color(self, value):
+        raw = str(value or "").strip().lstrip("#")
+        if not raw:
+            return None
+        try:
+            return discord.Color(int(raw, 16))
+        except ValueError:
+            return None
+
+    def _apply_embed_footer(self, embed, variables, text_value, icon_url_value):
+        text = self._render_template(text_value, variables)
+        icon_url = self._render_template(icon_url_value, variables)
+        kwargs = {}
+        if text:
+            kwargs["text"] = text
+        if icon_url:
+            kwargs["icon_url"] = icon_url
+        if kwargs:
+            embed.set_footer(**kwargs)
+
+    def _apply_embed_author(self, embed, variables, name_value, icon_url_value, url_value):
+        name = self._render_template(name_value, variables)
+        icon_url = self._render_template(icon_url_value, variables)
+        url = self._render_template(url_value, variables)
+        kwargs = {}
+        if name:
+            kwargs["name"] = name
+        if icon_url:
+            kwargs["icon_url"] = icon_url
+        if url:
+            kwargs["url"] = url
+        if kwargs:
+            embed.set_author(**kwargs)
+
+    def _apply_embed_media(self, embed, variables, thumbnail_value, image_value):
+        thumbnail_url = self._render_template(thumbnail_value, variables)
+        image_url = self._render_template(image_value, variables)
+        if thumbnail_url:
+            embed.set_thumbnail(url=thumbnail_url)
+        if image_url:
+            embed.set_image(url=image_url)
+
+    def _apply_embed_fields(self, embed, variables, fields_json):
+        rendered = self._render_template(fields_json, variables).strip()
+        if not rendered:
+            return
+        try:
+            fields = json.loads(rendered)
+        except json.JSONDecodeError:
+            return
+        if not isinstance(fields, list):
+            return
+        for item in fields[:25]:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name") or "").strip()
+            value = str(item.get("value") or "").strip()
+            if not name or not value:
+                continue
+            embed.add_field(name=name, value=value, inline=bool(item.get("inline", False)))
+
+    def _apply_embed_timestamp(self, embed, variables, timestamp_mode, timestamp_value):
+        mode = str(timestamp_mode or "none").lower()
+        if mode == "auto":
+            embed.timestamp = discord.utils.utcnow()
+            return
+        if mode != "custom":
+            return
+        rendered = self._render_template(timestamp_value, variables).strip()
+        if not rendered:
+            return
+        parsed = discord.utils.parse_time(rendered)
+        if parsed:
+            embed.timestamp = parsed
+
+    def _coerce_literal(self, value, value_type, variables):
+        rendered = self._render_template(value, variables)
+        kind = str(value_type or "string").lower()
+        if kind == "number":
+            try:
+                numeric = float(rendered)
+                return int(numeric) if numeric.is_integer() else numeric
+            except ValueError:
+                return 0
+        if kind == "boolean":
+            return rendered.strip().lower() in ("true", "1", "yes", "si", "on")
+        if kind == "json":
+            try:
+                return json.loads(rendered)
+            except json.JSONDecodeError:
+                return {}
+        if kind == "list":
+            try:
+                parsed = json.loads(rendered)
+                if isinstance(parsed, list):
+                    return parsed
+            except json.JSONDecodeError:
+                pass
+            return [item.strip() for item in rendered.split(",") if item.strip()]
+        if kind == "null":
+            return None
+        return rendered
+
+    def _resolve_return_token(self, token, variables):
+        raw = str(token or "").strip()
+        if raw in (variables or {}):
+            return variables[raw]
+        rendered = self._render_template(raw, variables)
+        lowered = rendered.lower()
+        if lowered in ("none", "null"):
+            return None
+        if lowered == "true":
+            return True
+        if lowered == "false":
+            return False
+        try:
+            return json.loads(rendered)
+        except json.JSONDecodeError:
+            return rendered
+
+    def _resolve_return_values(self, values_csv, variables):
+        parts = [item.strip() for item in str(values_csv or "").split(",") if item.strip()]
+        if not parts:
+            return None
+        resolved = tuple(self._resolve_return_token(item, variables) for item in parts)
+        return resolved if len(resolved) > 1 else resolved[0]
+
+    def _store_return_values(self, variables, names_csv, result):
+        names = [item.strip() for item in str(names_csv or "").split(",") if item.strip()]
+        if not names:
+            return
+        values = result if isinstance(result, tuple) else (result,)
+        for index, name in enumerate(names):
+            variables[name] = values[index] if index < len(values) else None
+
+    async def _save_json(self, file_path, data):
+        directory = os.path.dirname(file_path)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+        with open(file_path, "w", encoding="utf-8") as file_handle:
+            json.dump(data, file_handle, ensure_ascii=False, indent=2)
+
+    async def _load_json(self, file_path):
+        if not os.path.exists(file_path):
+            return {}
+        with open(file_path, "r", encoding="utf-8") as file_handle:
+            return json.load(file_handle)
+
+    async def _invoke_prefixed_command(self, target, command_name):
+        if not hasattr(target, "invoke"):
+            return False
+        cmd = self.bot.get_command(command_name)
+        if not cmd:
+            return False
+        await target.invoke(cmd)
+        return True
+
+    def _resolve_role(self, guild, role_value):
+        if not guild:
+            return None
+        raw = str(role_value or "").strip()
+        if not raw:
+            return None
+        try:
+            return guild.get_role(int(raw))
+        except (TypeError, ValueError):
+            return discord.utils.get(guild.roles, name=raw)
+
+    async def _resolve_member_target(self, target, variables, target_type, target_variable):
+        guild = self._get_guild(target)
+        if not guild:
+            return None
+        resolved_type = str(target_type or "author").lower()
+        if resolved_type == "author":
+            author = self._get_author(target)
+            return author if isinstance(author, discord.Member) else guild.get_member(getattr(author, "id", 0))
+        if resolved_type == "guild_owner":
+            return guild.owner
+        if resolved_type == "user_id_variable":
+            variable_name = str(target_variable or "").strip()
+            user_id = (variables or {}).get(variable_name)
+            try:
+                return guild.get_member(int(user_id))
+            except (TypeError, ValueError):
+                return None
+        return None
+`;
+  const source = `import json\nimport os\nimport discord\nfrom discord import app_commands\nfrom discord.ext import commands\n\nclass ${className}(commands.Cog):\n    def __init__(self, bot):\n        self.bot = bot\n${runtimeHelpers}\n    ${decorator}\n    async def ${commandHandlerName}(self, ${commandParameter}):\n        target = ${commandTarget}\n        variables = {}\n${commandBody}\n${functionMethods}\nasync def setup(bot):\n    await bot.add_cog(${className}(bot))\n`;
+
+  if (writeToDisk) {
+    await fs.promises.writeFile(outPath, source, "utf8");
+  }
+  return {
+    name: safeName,
+    module: targetModule || `generated.${safeName}`,
+    commandPrefix: triggerPrefix,
+    source,
+    file: relFromBotRoot(config, outPath),
+  };
+}
 
 // File upload endpoint
 app.post("/api/upload", upload.single("image"), (req, res) => {
@@ -2151,6 +2962,446 @@ app.post("/api/newsletter/send", async (req, res) => {
   } catch (err) {
     console.error("❌ Errore invio newsletter:", err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Discord bot control endpoints
+app.get("/api/bot/config", async (req, res) => {
+  try {
+    await db.read();
+    res.json(getBotConfig());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put("/api/bot/config", async (req, res) => {
+  try {
+    await db.read();
+    const current = getBotConfig();
+    const payload = req.body || {};
+
+    const updated = {
+      rootPath: payload.rootPath ? path.resolve(String(payload.rootPath)) : current.rootPath,
+      entryScript: payload.entryScript ? String(payload.entryScript) : current.entryScript,
+      pythonCommand: payload.pythonCommand ? String(payload.pythonCommand) : current.pythonCommand,
+      pm2ProcessName: payload.pm2ProcessName ? String(payload.pm2ProcessName) : current.pm2ProcessName,
+    };
+
+    db.data.bot_config = updated;
+    await db.write();
+    pushBotLog("info", `Bot config updated (root=${updated.rootPath}, pm2=${updated.pm2ProcessName})`);
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get("/api/bot/status", async (req, res) => {
+  try {
+    await db.read();
+    res.json(await getBotStatus());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/bot/start", async (req, res) => {
+  try {
+    await db.read();
+    const status = await startBotProcess();
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/bot/stop", async (req, res) => {
+  try {
+    await db.read();
+    const result = await stopBotProcess(Boolean(req.body?.force));
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/bot/restart", async (req, res) => {
+  try {
+    await db.read();
+    const status = await restartBotProcess();
+    res.json(status);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/bot/logs", async (req, res) => {
+  try {
+    await db.read();
+    const limit = Math.max(1, Math.min(2000, Number(req.query.limit || 200)));
+    const entries = await getPm2LogEntries(limit);
+    res.json(entries);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/bot/logs/stream", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders?.();
+
+  botLogSubscribers.add(res);
+  const heartbeat = setInterval(() => {
+    res.write(`event: ping\ndata: ${Date.now()}\n\n`);
+  }, 15000);
+
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    botLogSubscribers.delete(res);
+  });
+});
+
+app.post("/api/bot/terminal/exec", async (req, res) => {
+  try {
+    const command = String(req.body?.command || "").trim();
+    const cwdRelative = String(req.body?.cwd || ".");
+    if (!command) {
+      return res.status(400).json({ error: "Command is required" });
+    }
+
+    await db.read();
+    const config = getBotConfig();
+    const cwd = resolveSandboxPath(config, cwdRelative);
+    const result = await runCommand(command, [], { cwd });
+    pushBotLog("command", `$ ${command}`);
+    if (result.stdout) pushBotLog("stdout", result.stdout);
+    if (result.stderr) pushBotLog("stderr", result.stderr);
+
+    res.json({
+      ...result,
+      cwd: relFromBotRoot(config, cwd),
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get("/api/bot/files", async (req, res) => {
+  try {
+    await db.read();
+    const config = getBotConfig();
+    const rel = String(req.query.path || ".");
+    const files = await listDirectory(config, rel);
+    res.json({ path: rel, entries: files });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get("/api/bot/file", async (req, res) => {
+  try {
+    await db.read();
+    const config = getBotConfig();
+    const rel = String(req.query.path || "");
+    if (!rel) {
+      return res.status(400).json({ error: "path query is required" });
+    }
+    const abs = resolveSandboxPath(config, rel);
+    const stats = await fs.promises.stat(abs);
+    if (!stats.isFile()) {
+      return res.status(400).json({ error: "Path is not a file" });
+    }
+    const content = await fs.promises.readFile(abs, "utf8");
+    res.json({ path: relFromBotRoot(config, abs), content, mtime: stats.mtime.toISOString() });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.put("/api/bot/file", async (req, res) => {
+  try {
+    await db.read();
+    const config = getBotConfig();
+    const rel = String(req.body?.path || "");
+    const content = String(req.body?.content || "");
+    if (!rel) {
+      return res.status(400).json({ error: "path is required" });
+    }
+    const abs = resolveSandboxPath(config, rel);
+    await fs.promises.writeFile(abs, content, "utf8");
+    pushBotLog("info", `File updated: ${rel}`);
+    res.json({ success: true, path: relFromBotRoot(config, abs) });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post("/api/bot/file", async (req, res) => {
+  try {
+    await db.read();
+    const config = getBotConfig();
+    const rel = String(req.body?.path || "");
+    const type = String(req.body?.type || "file");
+    const content = String(req.body?.content || "");
+    if (!rel) {
+      return res.status(400).json({ error: "path is required" });
+    }
+    const abs = resolveSandboxPath(config, rel);
+    if (type === "dir") {
+      await fs.promises.mkdir(abs, { recursive: true });
+    } else {
+      await fs.promises.mkdir(path.dirname(abs), { recursive: true });
+      await fs.promises.writeFile(abs, content, "utf8");
+    }
+    pushBotLog("info", `Created ${type}: ${rel}`);
+    res.json({ success: true, path: relFromBotRoot(config, abs) });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete("/api/bot/file", async (req, res) => {
+  try {
+    await db.read();
+    const config = getBotConfig();
+    const rel = String(req.query.path || "");
+    if (!rel) {
+      return res.status(400).json({ error: "path query is required" });
+    }
+    const abs = resolveSandboxPath(config, rel);
+    await fs.promises.rm(abs, { recursive: true, force: true });
+    pushBotLog("info", `Deleted path: ${rel}`);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post("/api/bot/file/rename", async (req, res) => {
+  try {
+    await db.read();
+    const config = getBotConfig();
+    const oldRel = String(req.body?.oldPath || "");
+    const newRel = String(req.body?.newPath || "");
+    if (!oldRel || !newRel) {
+      return res.status(400).json({ error: "oldPath and newPath are required" });
+    }
+    const oldAbs = resolveSandboxPath(config, oldRel);
+    const newAbs = resolveSandboxPath(config, newRel);
+    await fs.promises.mkdir(path.dirname(newAbs), { recursive: true });
+    await fs.promises.rename(oldAbs, newAbs);
+    pushBotLog("info", `Renamed: ${oldRel} -> ${newRel}`);
+    res.json({ success: true, oldPath: oldRel, newPath: newRel });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get("/api/bot/modules", async (req, res) => {
+  try {
+    await db.read();
+    const config = getBotConfig();
+    const available = await scanCogs(config);
+    const enabledMap = db.data.bot_modules || {};
+    const modules = available.map((name) => ({
+      name,
+      enabled: Boolean(enabledMap[name]),
+    }));
+    res.json({ modules });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put("/api/bot/modules", async (req, res) => {
+  try {
+    await db.read();
+    const config = getBotConfig();
+    const enabled = Array.isArray(req.body?.enabled) ? req.body.enabled : [];
+    const available = await scanCogs(config);
+    const enabledMap = {};
+    for (const name of available) {
+      enabledMap[name] = enabled.includes(name);
+    }
+    db.data.bot_modules = enabledMap;
+    await db.write();
+    pushBotLog("info", `Modules updated: ${enabled.join(", ")}`);
+    res.json({ success: true, bot_modules: enabledMap });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get("/api/bot/builder/flows", async (req, res) => {
+  try {
+    await db.read();
+    res.json({ flows: db.data.bot_builder_flows || [] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete("/api/bot/builder/flows", async (req, res) => {
+  try {
+    await db.read();
+    const config = getBotConfig();
+    const flowName = String(req.query.name || req.body?.name || "").trim();
+    if (!flowName) {
+      return res.status(400).json({ error: "name is required" });
+    }
+
+    const existing = (db.data.bot_builder_flows || []).find((flow) => flow.name === flowName);
+    if (!existing) {
+      return res.status(404).json({ error: "Workflow non trovato" });
+    }
+
+    const compiledFile = typeof existing.compiled_file === "string" ? existing.compiled_file : "";
+    const moduleName = typeof existing.module === "string" ? existing.module : relativeCogPathToModuleName(compiledFile);
+
+    db.data.bot_builder_flows = (db.data.bot_builder_flows || []).filter((flow) => flow.name !== flowName);
+    if (moduleName && db.data.bot_modules) {
+      delete db.data.bot_modules[moduleName];
+    }
+    await db.write();
+
+    if (compiledFile) {
+      const absPath = resolveSandboxPath(config, compiledFile);
+      if (fs.existsSync(absPath)) {
+        await fs.promises.rm(absPath, { force: true });
+      }
+    }
+
+    let restarted = false;
+    let restartError = null;
+    const status = await getBotStatus();
+    if (status.running) {
+      try {
+        await restartBotProcess();
+        restarted = true;
+        pushBotLog("info", `Bot restarted after deleting workflow: ${flowName}`);
+      } catch (error) {
+        restartError = error.message;
+        pushBotLog("error", `Auto-restart failed after deleting workflow ${flowName}: ${error.message}`);
+      }
+    }
+
+    pushBotLog("info", `Workflow deleted: ${flowName}`);
+    res.json({ success: true, name: flowName, deletedFile: compiledFile || null, restarted, restartError });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post("/api/bot/builder/save-source", async (req, res) => {
+  try {
+    await db.read();
+    const config = getBotConfig();
+    const source = String(req.body?.source || "");
+    const targetPath = normalizeCogRelativePath(req.body?.path, req.body?.name || "custom_cog");
+    const moduleName = relativeCogPathToModuleName(targetPath);
+    const absPath = resolveSandboxPath(config, targetPath);
+
+    await fs.promises.mkdir(path.dirname(absPath), { recursive: true });
+    await fs.promises.writeFile(absPath, source, "utf8");
+
+    if (moduleName) {
+      db.data.bot_modules ||= {};
+      db.data.bot_modules[moduleName] = true;
+      await db.write();
+    }
+
+    let restarted = false;
+    let restartError = null;
+    const status = await getBotStatus();
+    if (status.running) {
+      try {
+        await restartBotProcess();
+        restarted = true;
+        pushBotLog("info", `Bot restarted after saving builder source: ${targetPath}`);
+      } catch (error) {
+        restartError = error.message;
+        pushBotLog("error", `Auto-restart failed after saving builder source ${targetPath}: ${error.message}`);
+      }
+    }
+
+    pushBotLog("info", `Builder source saved to cog: ${targetPath}`);
+    res.json({
+      success: true,
+      path: targetPath,
+      module: moduleName,
+      restarted,
+      restartError,
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post("/api/bot/builder/compile", async (req, res) => {
+  try {
+    await db.read();
+    const config = getBotConfig();
+    const flow = req.body?.flow;
+    const preview = req.body?.preview === true;
+    if (!flow || !flow.name) {
+      return res.status(400).json({ error: "flow with name is required" });
+    }
+
+    const compiled = await compileFlowToCog(config, flow, {
+      writeToDisk: !preview,
+      outputPath: req.body?.outputPath || flow?.targetPath,
+    });
+    let restarted = false;
+    let restartError = null;
+    
+    // Se preview=true, non salvare il file fisicamente, solo visualizzare l'anteprima
+    if (!preview) {
+      const flowRecord = {
+        id: Date.now(),
+        ...flow,
+        compiled_file: compiled.file,
+        updated_at: new Date().toISOString(),
+      };
+
+      db.data.bot_builder_flows = (db.data.bot_builder_flows || []).filter((f) => f.name !== flow.name && f.compiled_file !== compiled.file);
+      db.data.bot_builder_flows.push({
+        ...flowRecord,
+        module: compiled.module,
+      });
+      db.data.bot_modules ||= {};
+      db.data.bot_modules[compiled.module] = true;
+      await db.write();
+
+      pushBotLog("info", `Flow compiled to cog: ${compiled.file} (enabled: ${compiled.module})`);
+
+      const status = await getBotStatus();
+      if (status.running) {
+        try {
+          await restartBotProcess();
+          restarted = true;
+          pushBotLog("info", `Bot restarted after compiling flow: ${compiled.name}`);
+        } catch (error) {
+          restartError = error.message;
+          pushBotLog("error", `Auto-restart failed after compiling flow ${compiled.name}: ${error.message}`);
+        }
+      }
+    } else {
+      pushBotLog("info", `Flow preview compiled (virtual): ${flow.name}`);
+    }
+
+    res.json({
+      success: true,
+      compiled,
+      preview,
+      restarted,
+      restartError,
+      flow: { name: flow.name, nodes: flow.nodes, edges: flow.edges },
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 
