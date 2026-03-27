@@ -43,18 +43,40 @@ const transporter = nodemailer.createTransport({
 });
 
 // Verifica connessione SMTP
-transporter.verify((error, success) => {
-  if (error) {
-    console.error('❌ Errore configurazione email:', error);
-  } else {
-    console.log('✅ Server email pronto per inviare messaggi');
-  }
-});
+if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
+  transporter.verify((error, success) => {
+    if (error) {
+      console.error('❌ Errore configurazione email:', error);
+    } else {
+      console.log('✅ Server email pronto per inviare messaggi');
+    }
+  });
+} else {
+  console.warn('⚠️ GMAIL_USER / GMAIL_APP_PASSWORD non impostate: invio email disabilitato');
+}
 
 // Initialize Stripe
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
-  apiVersion: "2024-12-18.acacia",
-});
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim();
+const stripe = stripeSecretKey
+  ? new Stripe(stripeSecretKey, {
+      apiVersion: "2024-12-18.acacia",
+    })
+  : null;
+
+if (!stripe) {
+  console.warn("⚠️ STRIPE_SECRET_KEY non impostata: endpoint checkout Stripe disabilitati");
+}
+
+function ensureStripeConfigured(res) {
+  if (!stripe) {
+    res.status(503).json({
+      error: "Stripe is not configured on server",
+      missingEnv: "STRIPE_SECRET_KEY",
+    });
+    return false;
+  }
+  return true;
+}
 
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
@@ -1025,6 +1047,7 @@ app.post("/api/shop-settings", async (req, res) => {
 // Payment endpoints
 app.post("/api/create-checkout-session", async (req, res) => {
   try {
+    if (!ensureStripeConfigured(res)) return;
     console.log('[CHECKOUT] Starting checkout session creation');
     const { items, customer_email } = req.body; // items = [{ id, quantity }], customer_email = user email
     console.log('[CHECKOUT] Items received:', JSON.stringify(items, null, 2));
@@ -1270,6 +1293,7 @@ app.post("/api/create-checkout-session", async (req, res) => {
 
 // Webhook endpoint for Stripe events
 app.post("/api/webhook/stripe", express.raw({ type: 'application/json' }), async (req, res) => {
+  if (!ensureStripeConfigured(res)) return;
   const sig = req.headers['stripe-signature'];
   let event;
 
@@ -1506,6 +1530,7 @@ app.post("/api/orders/:id/notify", async (req, res) => {
 // Get session details (for success page)
 app.get("/api/checkout-session/:sessionId", async (req, res) => {
   try {
+    if (!ensureStripeConfigured(res)) return;
     const sessionId = req.params.sessionId;
     console.log('[CHECKOUT-SESSION] Retrieving session:', sessionId);
     
@@ -1540,6 +1565,7 @@ app.get("/api/checkout-session/:sessionId", async (req, res) => {
 // Save order from session (fallback quando il webhook non funziona)
 app.post("/api/save-order", async (req, res) => {
   try {
+    if (!ensureStripeConfigured(res)) return;
     const { sessionId } = req.body;
     
     console.log('[SAVE-ORDER] Request received for session:', sessionId);
@@ -1824,8 +1850,23 @@ app.post("/api/password-reset/complete", async (req, res) => {
 app.get("/api/playlists", async (req, res) => {
   try {
     await db.read();
+    if (!db.data.playlists) db.data.playlists = [];
+
+    let hasChanges = false;
+    db.data.playlists.forEach((item, index) => {
+      if (item.display_order === undefined || item.display_order === null) {
+        item.display_order = index + 1;
+        hasChanges = true;
+      }
+    });
+
+    if (hasChanges) {
+      await db.write();
+    }
+
+    const sorted = (db.data.playlists || []).sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
     // Convert relative image URLs to full URLs
-    const withFullUrls = (db.data.playlists || []).map(item => convertImageUrls(item, ['thumbnail']));
+    const withFullUrls = sorted.map(item => convertImageUrls(item, ['thumbnail']));
     res.json(withFullUrls);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1835,7 +1876,9 @@ app.get("/api/playlists", async (req, res) => {
 app.post("/api/playlists", async (req, res) => {
   try {
     await db.read();
+    if (!db.data.playlists) db.data.playlists = [];
     const { title, description, video_ids, youtube_link, thumbnail } = req.body;
+    const maxOrder = db.data.playlists.length > 0 ? Math.max(...db.data.playlists.map(p => p.display_order || 0)) : 0;
     const newPlaylist = {
       id: Date.now(),
       title,
@@ -1843,6 +1886,7 @@ app.post("/api/playlists", async (req, res) => {
       video_ids: video_ids || null,
       youtube_link: youtube_link || null,
       thumbnail: thumbnail || null,
+      display_order: maxOrder + 1,
       created_at: new Date().toISOString(),
     };
     db.data.playlists.push(newPlaylist);
@@ -1865,7 +1909,7 @@ app.delete("/api/playlists/:id", async (req, res) => {
   }
 });
 
-app.put("/api/playlists/:id", async (req, res) => {
+app.put("/api/playlists/:id(\\d+)", async (req, res) => {
   try {
     await db.read();
     const id = parseInt(req.params.id);
@@ -1881,12 +1925,49 @@ app.put("/api/playlists/:id", async (req, res) => {
   }
 });
 
+app.put("/api/playlists/reorder", async (req, res) => {
+  try {
+    await db.read();
+    const { items } = req.body;
+    if (!Array.isArray(items)) {
+      return res.status(400).json({ error: "Invalid payload" });
+    }
+
+    items.forEach(({ id, display_order }) => {
+      const index = (db.data.playlists || []).findIndex((item) => item.id === id);
+      if (index !== -1) {
+        db.data.playlists[index].display_order = display_order;
+      }
+    });
+
+    await db.write();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Videos endpoints
 app.get("/api/videos", async (req, res) => {
   try {
     await db.read();
+    if (!db.data.videos) db.data.videos = [];
+
+    let hasChanges = false;
+    db.data.videos.forEach((item, index) => {
+      if (item.display_order === undefined || item.display_order === null) {
+        item.display_order = index + 1;
+        hasChanges = true;
+      }
+    });
+
+    if (hasChanges) {
+      await db.write();
+    }
+
+    const sorted = (db.data.videos || []).sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
     // Convert relative image URLs to full URLs
-    const withFullUrls = (db.data.videos || []).map(item => convertImageUrls(item, ['thumbnail']));
+    const withFullUrls = sorted.map(item => convertImageUrls(item, ['thumbnail']));
     res.json(withFullUrls);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1896,7 +1977,9 @@ app.get("/api/videos", async (req, res) => {
 app.post("/api/videos", async (req, res) => {
   try {
     await db.read();
+    if (!db.data.videos) db.data.videos = [];
     const { title, thumbnail, duration, views, date, video_link } = req.body;
+    const maxOrder = db.data.videos.length > 0 ? Math.max(...db.data.videos.map(v => v.display_order || 0)) : 0;
     const newVideo = {
       id: Date.now(),
       title,
@@ -1905,6 +1988,7 @@ app.post("/api/videos", async (req, res) => {
       views: views || "",
       date: date || "",
       video_link: video_link || "",
+      display_order: maxOrder + 1,
       created_at: new Date().toISOString(),
     };
     db.data.videos.push(newVideo);
@@ -1927,7 +2011,7 @@ app.delete("/api/videos/:id", async (req, res) => {
   }
 });
 
-app.put("/api/videos/:id", async (req, res) => {
+app.put("/api/videos/:id(\\d+)", async (req, res) => {
   try {
     await db.read();
     const id = parseInt(req.params.id);
@@ -1938,6 +2022,28 @@ app.put("/api/videos/:id", async (req, res) => {
     db.data.videos[index] = { ...db.data.videos[index], ...req.body, id };
     await db.write();
     res.json(db.data.videos[index]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put("/api/videos/reorder", async (req, res) => {
+  try {
+    await db.read();
+    const { items } = req.body;
+    if (!Array.isArray(items)) {
+      return res.status(400).json({ error: "Invalid payload" });
+    }
+
+    items.forEach(({ id, display_order }) => {
+      const index = (db.data.videos || []).findIndex((item) => item.id === id);
+      if (index !== -1) {
+        db.data.videos[index].display_order = display_order;
+      }
+    });
+
+    await db.write();
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

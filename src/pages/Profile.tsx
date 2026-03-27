@@ -74,8 +74,9 @@ const Profile = () => {
   // Debounce per la verifica del nickname
   useEffect(() => {
     // Se il nickname è vuoto o è lo stesso di quello iniziale, non verificare
-    if (!nickname || nickname === initialNickname || !user) {
+    if (!nickname || nickname === initialNickname || !user || isLoading) {
       setNicknameError("");
+      setIsCheckingNickname(false);
       return;
     }
 
@@ -88,7 +89,7 @@ const Profile = () => {
 
     // Pulizia del timer
     return () => clearTimeout(timer);
-  }, [nickname, initialNickname, user]);
+  }, [nickname, initialNickname, user, isLoading]);
 
   const checkNicknameAvailability = async (newNickname: string) => {
     try {
@@ -200,6 +201,7 @@ const Profile = () => {
       return;
     }
 
+    setIsCheckingNickname(false);
     setIsLoading(true);
     try {
       if (user) {

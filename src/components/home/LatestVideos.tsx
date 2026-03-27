@@ -15,6 +15,7 @@ type Video = {
   views: string;
   date: string;
   video_link?: string;
+  display_order?: number;
 };
 
 export function LatestVideos() {

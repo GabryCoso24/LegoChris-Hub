@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Upload, Play, Edit, Save, X, Calendar as CalendarIcon, Clock } from "lucide-react";
+import { Plus, Trash2, Upload, Play, Edit, Save, X, Calendar as CalendarIcon, Clock, GripVertical, ArrowUpDown } from "lucide-react";
 import { API_ENDPOINTS, API_URL } from "@/lib/api";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -26,6 +26,7 @@ type Video = {
   views: string; 
   date: string;
   video_link: string;
+  display_order?: number;
 };
 
 export default function VideosManager() {
@@ -45,6 +46,9 @@ export default function VideosManager() {
   const [selectedHour, setSelectedHour] = useState<string>("12");
   const [selectedMinute, setSelectedMinute] = useState<string>("00");
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [isReordering, setIsReordering] = useState(false);
+  const [tempItems, setTempItems] = useState<Video[]>([]);
 
   const uploadImage = async (file: File) => {
     const formData = new FormData();
@@ -86,7 +90,7 @@ export default function VideosManager() {
         body: JSON.stringify(form),
       });
       const newItem = await res.json();
-      setItems((prev) => [newItem, ...prev]); // Inserisce il nuovo video all'inizio
+      setItems((prev) => [...prev, newItem]);
       setForm({ title: "", thumbnail: null, duration: "", views: "", date: "", video_link: "" });
       setSelectedDate(undefined);
       setSelectedHour("12");
@@ -159,8 +163,111 @@ export default function VideosManager() {
     setSelectedMinute("00");
   };
 
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (dropIndex: number) => {
+    if (draggedIndex === null || draggedIndex === dropIndex) {
+      setDraggedIndex(null);
+      return;
+    }
+
+    const currentItems = isReordering ? tempItems : items;
+    const newItems = [...currentItems];
+    const [draggedItem] = newItems.splice(draggedIndex, 1);
+    newItems.splice(dropIndex, 0, draggedItem);
+
+    if (isReordering) {
+      setTempItems(newItems);
+    } else {
+      setItems(newItems);
+    }
+    setDraggedIndex(null);
+  };
+
+  const startReordering = () => {
+    if (editingId) return;
+    setTempItems([...items]);
+    setIsReordering(true);
+  };
+
+  const cancelReordering = () => {
+    setTempItems([]);
+    setIsReordering(false);
+    setDraggedIndex(null);
+  };
+
+  const saveReordering = async () => {
+    const updatedItems = tempItems.map((item, idx) => ({
+      ...item,
+      display_order: idx + 1,
+    }));
+
+    const reorderedItems = updatedItems
+      .filter((item) => item.id)
+      .map((item) => ({
+        id: item.id!,
+        display_order: item.display_order!,
+      }));
+
+    try {
+      await fetch(API_ENDPOINTS.videosReorder, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: reorderedItems }),
+      });
+      setItems(updatedItems);
+      setIsReordering(false);
+      setTempItems([]);
+    } catch (e) {
+      console.error("Reorder failed", e);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-end">
+        {!isReordering && items.length > 0 && !editingId && (
+          <button
+            className="flex items-center gap-2 px-4 py-2 bg-muted hover:bg-muted/80 rounded-lg transition-colors"
+            onClick={startReordering}
+          >
+            <ArrowUpDown className="w-4 h-4" />
+            <span className="text-sm font-medium">Riordina</span>
+          </button>
+        )}
+      </div>
+
+      {isReordering && (
+        <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <GripVertical className="w-5 h-5 text-primary" />
+            <span className="text-sm font-medium text-primary">Modalita Riordina: trascina i video e salva l'ordine</span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition-colors"
+              onClick={saveReordering}
+            >
+              <Save className="w-4 h-4" />
+              <span className="text-sm font-medium">Salva Ordine</span>
+            </button>
+            <button
+              className="flex items-center gap-2 px-4 py-2 bg-muted hover:bg-muted/80 rounded-lg transition-colors"
+              onClick={cancelReordering}
+            >
+              <X className="w-4 h-4" />
+              <span className="text-sm font-medium">Annulla</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="bg-background/50 p-6 rounded-lg border border-border">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <input
@@ -336,12 +443,21 @@ export default function VideosManager() {
             <p>Nessun video ancora. Aggiungine uno!</p>
           </div>
         ) : (
-          items.map((it) => (
+          (isReordering ? tempItems : items).map((it, index) => (
             <div
               key={it.id}
+              draggable={isReordering}
+              onDragStart={() => handleDragStart(index)}
+              onDragOver={handleDragOver}
+              onDrop={() => handleDrop(index)}
               className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-card/50 p-4 rounded-lg border border-border hover:border-primary/50 transition-colors group"
             >
               <div className="flex items-center gap-3 md:gap-4 flex-1">
+                {isReordering && (
+                  <div className="cursor-grab active:cursor-grabbing text-foreground/50">
+                    <GripVertical className="w-4 h-4 md:w-5 md:h-5" />
+                  </div>
+                )}
                 {it.thumbnail && (
                   <img
                     src={it.thumbnail}
@@ -364,6 +480,7 @@ export default function VideosManager() {
                 <button
                   className="flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 md:px-3 md:py-2 text-primary hover:bg-primary/10 rounded-lg transition-colors text-xs md:text-sm"
                   onClick={() => startEdit(it)}
+                  disabled={isReordering}
                 >
                   <Edit className="w-3.5 h-3.5 md:w-4 md:h-4" />
                   <span className="font-medium">Modifica</span>
@@ -371,6 +488,7 @@ export default function VideosManager() {
                 <button
                   className="flex items-center gap-1.5 md:gap-2 px-2.5 py-1.5 md:px-3 md:py-2 text-destructive hover:bg-destructive/10 rounded-lg transition-colors text-xs md:text-sm"
                   onClick={() => setDeleteId(it.id!)}
+                  disabled={isReordering}
                 >
                   <Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4" />
                   <span className="font-medium">Rimuovi</span>

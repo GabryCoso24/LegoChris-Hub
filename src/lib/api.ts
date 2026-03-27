@@ -7,7 +7,9 @@ export const API_URL = rawApiUrl.endsWith("/") ? rawApiUrl.slice(0, -1) : rawApi
 
 export const API_ENDPOINTS = {
   videos: `${API_URL}/api/videos`,
+  videosReorder: `${API_URL}/api/videos/reorder`,
   playlists: `${API_URL}/api/playlists`,
+  playlistsReorder: `${API_URL}/api/playlists/reorder`,
   products: `${API_URL}/api/products`,
   team: `${API_URL}/api/team`,
   staff: `${API_URL}/api/staff`,

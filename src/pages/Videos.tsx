@@ -15,6 +15,7 @@ type Playlist = {
   description: string | null;
   youtube_link: string | null;
   thumbnail: string | null;
+  display_order?: number;
 };
 
 const Videos = () => {
@@ -26,7 +27,8 @@ const Videos = () => {
       try {
         const res = await fetch(API_ENDPOINTS.playlists);
         const data = await res.json();
-        setPlaylists(data || []);
+        const ordered = (data || []).sort((a: Playlist, b: Playlist) => (a.display_order || 0) - (b.display_order || 0));
+        setPlaylists(ordered);
       } catch (e) {
         console.warn("Could not load playlists", e);
       }
