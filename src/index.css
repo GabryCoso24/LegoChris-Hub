@@ -250,6 +250,49 @@
     transform: translateY(0);
   }
 
+  .reorder-item {
+    transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease, box-shadow 220ms ease;
+  }
+
+  .reorder-item-dragging {
+    opacity: 0.55;
+    transform: scale(0.985);
+    box-shadow: 0 12px 28px hsl(0 0% 0% / 0.32);
+  }
+
+  .reorder-item-source-hidden {
+    opacity: 0;
+    height: 0;
+    min-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    border-width: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .reorder-placeholder {
+    height: 68px;
+    border-radius: 12px;
+    background: linear-gradient(90deg, hsl(25 100% 55% / 0.2), hsl(35 100% 50% / 0.2));
+    border: 1px dashed hsl(25 100% 55% / 0.6);
+    margin: 6px 0;
+    animation: reorderPlaceholderIn 160ms ease;
+  }
+
+  @keyframes reorderPlaceholderIn {
+    from {
+      opacity: 0;
+      transform: scaleY(0.35);
+    }
+    to {
+      opacity: 1;
+      transform: scaleY(1);
+    }
+  }
+
   /* Noise texture overlay */
   .noise::before {
     content: '';

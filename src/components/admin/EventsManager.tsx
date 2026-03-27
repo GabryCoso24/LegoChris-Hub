@@ -5,6 +5,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { OptimizedImage } from "@/components/ui/OptimizedImage";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 
@@ -34,6 +35,8 @@ export default function EventsManager() {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [isReordering, setIsReordering] = useState(false);
   const [tempItems, setTempItems] = useState<Event[]>([]);
+  const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
+  const [dropPosition, setDropPosition] = useState<"before" | "after">("before");
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [selectedHour, setSelectedHour] = useState<string>("12");
   const [selectedMinute, setSelectedMinute] = useState<string>("00");
@@ -154,20 +157,38 @@ export default function EventsManager() {
     setDraggedIndex(index);
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+
+    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+    const isUpperHalf = e.clientY < rect.top + rect.height / 2;
+    setDropTargetIndex(index);
+    setDropPosition(isUpperHalf ? "before" : "after");
   };
 
-  const handleDrop = async (dropIndex: number) => {
-    if (draggedIndex === null || draggedIndex === dropIndex) {
+  const handleDrop = async () => {
+    if (draggedIndex === null || dropTargetIndex === null) {
       setDraggedIndex(null);
+      setDropTargetIndex(null);
+      return;
+    }
+
+    let insertIndex = dropTargetIndex + (dropPosition === "after" ? 1 : 0);
+    if (insertIndex > draggedIndex) {
+      insertIndex -= 1;
+    }
+
+    if (insertIndex === draggedIndex) {
+      setDraggedIndex(null);
+      setDropTargetIndex(null);
       return;
     }
 
     const currentItems = isReordering ? tempItems : items;
     const newItems = [...currentItems];
     const [draggedItem] = newItems.splice(draggedIndex, 1);
-    newItems.splice(dropIndex, 0, draggedItem);
+    newItems.splice(insertIndex, 0, draggedItem);
 
     if (isReordering) {
       setTempItems(newItems);
@@ -175,6 +196,7 @@ export default function EventsManager() {
       setItems(newItems);
     }
     setDraggedIndex(null);
+    setDropTargetIndex(null);
   };
 
   const startReordering = () => {
@@ -186,6 +208,7 @@ export default function EventsManager() {
     setTempItems([]);
     setIsReordering(false);
     setDraggedIndex(null);
+    setDropTargetIndex(null);
   };
 
   const saveReordering = async () => {
@@ -208,6 +231,7 @@ export default function EventsManager() {
       setItems(updatedItems);
       setIsReordering(false);
       setTempItems([]);
+      setDropTargetIndex(null);
     } catch (e) {
       console.error("Reorder failed", e);
     }
@@ -388,7 +412,7 @@ export default function EventsManager() {
             </label>
             {form.image && (
               <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 rounded-lg border border-primary/20">
-                <img src={form.image} alt="Preview" className="w-8 h-8 rounded object-cover" />
+                <OptimizedImage src={form.image} alt="Preview" className="w-8 h-8 rounded object-cover" loading="eager" decoding="async" fetchPriority="low" width={32} height={32} />
                 <span className="text-xs text-primary font-medium">Immagine caricata</span>
               </div>
             )}
@@ -432,16 +456,23 @@ export default function EventsManager() {
           </div>
         ) : (
           (isReordering ? tempItems : items).map((it, index) => (
-            <div
-              key={it.id}
-              draggable={isReordering}
-              onDragStart={() => isReordering && handleDragStart(index)}
-              onDragOver={handleDragOver}
-              onDrop={() => isReordering && handleDrop(index)}
-              className={`flex items-center justify-between bg-background/50 hover:bg-background/80 p-4 rounded-lg border border-border transition-colors group ${
-                draggedIndex === index ? "opacity-50" : ""
-              } ${isReordering ? "cursor-move" : ""}`}
-            >
+            <div key={it.id}>
+              {isReordering && dropTargetIndex === index && dropPosition === "before" && draggedIndex !== index && (
+                <div className="reorder-placeholder" />
+              )}
+              <div
+                draggable={isReordering}
+                onDragStart={() => isReordering && handleDragStart(index)}
+                onDragOver={(e) => isReordering && handleDragOver(e, index)}
+                onDrop={() => isReordering && handleDrop()}
+                onDragEnd={() => {
+                  setDraggedIndex(null);
+                  setDropTargetIndex(null);
+                }}
+                className={`reorder-item flex items-center justify-between bg-background/50 hover:bg-background/80 p-4 rounded-lg border border-border transition-colors group ${
+                  draggedIndex === index ? "reorder-item-source-hidden" : ""
+                } ${isReordering ? "cursor-move" : ""}`}
+              >
               <div className="flex items-center gap-4 flex-1">
                 {isReordering && (
                   <div className="cursor-move">
@@ -454,7 +485,7 @@ export default function EventsManager() {
                   </div>
                 )}
                 {it.image ? (
-                  <img src={it.image} alt={it.title} className="w-20 h-20 rounded-lg object-cover border-2 border-primary/20" />
+                  <OptimizedImage src={it.image} alt={it.title} className="w-20 h-20 rounded-lg object-cover border-2 border-primary/20" loading="lazy" decoding="async" fetchPriority="low" width={80} height={80} />
                 ) : (
                   <div className="w-20 h-20 rounded-lg bg-muted flex items-center justify-center">
                     <CalendarIcon className="w-8 h-8 text-muted-foreground" />
@@ -496,6 +527,10 @@ export default function EventsManager() {
                     <span className="text-sm font-medium hidden sm:inline">Rimuovi</span>
                   </button>
                 </div>
+              )}
+              </div>
+              {isReordering && dropTargetIndex === index && dropPosition === "after" && draggedIndex !== index && (
+                <div className="reorder-placeholder" />
               )}
             </div>
           ))

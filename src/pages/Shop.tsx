@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { API_ENDPOINTS, API_URL } from "@/lib/api";
 import { useCart } from "@/contexts/CartContext";
+import { OptimizedImage } from "@/components/ui/OptimizedImage";
 
 type Product = {
   id: number;
@@ -99,10 +100,15 @@ const Shop = () => {
                   <div className="glass-card rounded-2xl overflow-hidden hover-lift group cursor-pointer">
                   <div className="relative aspect-square overflow-hidden bg-muted">
                     {getMainImage(product) ? (
-                      <img
+                      <OptimizedImage
                         src={getMainImage(product)!.startsWith('http') ? getMainImage(product)! : `${API_URL}${getMainImage(product)}`}
                         alt={product.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        loading={index < 2 ? "eager" : "lazy"}
+                        decoding="async"
+                        fetchPriority={index < 2 ? "high" : "low"}
+                        width={640}
+                        height={640}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">

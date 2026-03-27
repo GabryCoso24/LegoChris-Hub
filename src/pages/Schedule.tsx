@@ -5,6 +5,7 @@ import { GlowOrb } from "@/components/effects/GlowOrb";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { OptimizedImage } from "@/components/ui/OptimizedImage";
 import { Calendar, Video, Radio, ExternalLink, Clock } from "lucide-react";
 import { API_ENDPOINTS } from "@/lib/api";
 import { ScrollReveal } from "@/components/effects/ScrollReveal";
@@ -187,10 +188,15 @@ export default function Schedule() {
                             <div className="flex flex-col items-center gap-3 text-center">
                               {item.thumbnail ? (
                                 <div className="relative">
-                                  <img
+                                  <OptimizedImage
                                     src={item.thumbnail}
                                     alt={item.title}
                                     className="h-24 w-auto max-w-full object-contain rounded"
+                                    loading="lazy"
+                                    decoding="async"
+                                    fetchPriority="low"
+                                    width={192}
+                                    height={96}
                                   />
                                   {item.type === 'live' && (
                                     <div className="absolute -top-1 -right-1">
@@ -326,10 +332,15 @@ export default function Schedule() {
                               <div className="flex flex-col items-center gap-3 text-center">
                                 {item.thumbnail ? (
                                   <div className="relative">
-                                    <img
+                                    <OptimizedImage
                                       src={item.thumbnail}
                                       alt={item.title}
                                       className="h-24 w-auto max-w-full object-contain rounded"
+                                      loading="lazy"
+                                      decoding="async"
+                                      fetchPriority="low"
+                                      width={192}
+                                      height={96}
                                     />
                                     {item.type === 'live' && (
                                       <div className="absolute -top-1 -right-1">

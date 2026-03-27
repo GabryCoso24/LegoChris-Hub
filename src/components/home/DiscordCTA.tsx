@@ -3,6 +3,7 @@ import { MessageCircle, Users, Award, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollReveal } from "@/components/effects/ScrollReveal";
 import LogoSVG from "@/assets/logo-MT-team-sticker.svg";
+import { OptimizedImage } from "@/components/ui/OptimizedImage";
 
 const benefits = [
   { icon: MessageCircle, text: "Chatta con altri giocatori" },
@@ -58,7 +59,7 @@ export function DiscordCTA() {
                 <div className="glass-card rounded-2xl p-6 glow-border">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="w-14 h-14 rounded-full flex items-center justify-center">
-                      <img src={LogoSVG} alt="LegoChris Logo" className="w-12 h-12 logo-glow" />
+                      <OptimizedImage src={LogoSVG} alt="LegoChris Logo" className="w-12 h-12 logo-glow" loading="lazy" decoding="async" fetchPriority="low" width={48} height={48} />
                     </div>
                     <div>
                       <div className="font-display font-semibold">🧱 | I Mattoncini di LegoChris</div>

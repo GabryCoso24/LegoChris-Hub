@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { Play, ArrowRight, Clock, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollReveal } from "@/components/effects/ScrollReveal";
+import { OptimizedImage } from "@/components/ui/OptimizedImage";
 import { useEffect, useState } from "react";
 import { API_ENDPOINTS, API_URL } from "@/lib/api";
 import { formatDistanceToNow } from "date-fns";
@@ -86,10 +87,15 @@ export function LatestVideos() {
                     {/* Thumbnail */}
                     <div className="relative aspect-video overflow-hidden bg-muted">
                       {video.thumbnail ? (
-                        <img
+                        <OptimizedImage
                           src={video.thumbnail.startsWith('http') ? video.thumbnail : `${API_URL}${video.thumbnail}`}
                           alt={video.title}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          loading={index === 0 ? "eager" : "lazy"}
+                          decoding="async"
+                          fetchPriority={index === 0 ? "high" : "low"}
+                          width={640}
+                          height={360}
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center bg-primary/10">
@@ -137,10 +143,15 @@ export function LatestVideos() {
                     {/* Thumbnail */}
                     <div className="relative aspect-video overflow-hidden bg-muted">
                       {video.thumbnail ? (
-                        <img
+                        <OptimizedImage
                           src={video.thumbnail.startsWith('http') ? video.thumbnail : `${API_URL}${video.thumbnail}`}
                           alt={video.title}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          loading={index === 0 ? "eager" : "lazy"}
+                          decoding="async"
+                          fetchPriority={index === 0 ? "high" : "low"}
+                          width={640}
+                          height={360}
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center bg-primary/10">

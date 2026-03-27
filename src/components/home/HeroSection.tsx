@@ -3,17 +3,10 @@ import { Play, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GlowOrb } from "@/components/effects/GlowOrb";
 import { ScrollReveal } from "@/components/effects/ScrollReveal";
-import heroBg from "@/assets/hero-bg.jpg";
 
 export function HeroSection() {
   return (
     <section className="relative min-h-screen flex items-center justify-center pt-20 pb-20 md:pb-0 overflow-hidden">
-      {/* Hero Background Image */}
-      {/* <div className="absolute inset-0 z-0">
-        <img src={heroBg} alt="" className="w-full h-full object-cover opacity-40" />
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-background/60" />
-      </div> */}
-      
       {/* Background Effects */}
       <GlowOrb size="xl" className="top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2" />
       <GlowOrb size="lg" color="amber" className="bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2" />

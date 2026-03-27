@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { ParticleBackground } from "@/components/effects/ParticleBackground";
 import { ScrollReveal } from "@/components/effects/ScrollReveal";
+import { OptimizedImage } from "@/components/ui/OptimizedImage";
 import { Users, UserCog, Calendar, MapPin, ExternalLink } from "lucide-react";
 import { API_ENDPOINTS, API_URL } from "@/lib/api";
 
@@ -140,10 +141,15 @@ function FlipCard({ member, icon }: { member: Member; icon: React.ReactNode }) {
           }}
         >
           {member.avatarUrl ? (
-            <img
+            <OptimizedImage
               src={member.avatarUrl.startsWith("http") ? member.avatarUrl : `${API_URL}${member.avatarUrl}`}
               alt={member.username}
               className="w-20 h-20 rounded-full mb-2 object-cover"
+              loading="lazy"
+              decoding="async"
+              fetchPriority="low"
+              width={80}
+              height={80}
             />
           ) : (
             <div className="w-20 h-20 rounded-full mb-2 bg-primary/10 flex items-center justify-center">
@@ -236,10 +242,15 @@ export default function Community() {
                     <div className="bg-card rounded-lg overflow-hidden border border-border hover:border-primary/50 transition-all hover-lift group">
                       {event.image && (
                         <div className="relative h-48 overflow-hidden">
-                          <img
+                          <OptimizedImage
                             src={event.image.startsWith("http") ? event.image : `${API_URL}${event.image}`}
                             alt={event.title}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            loading={index < 2 ? "eager" : "lazy"}
+                            decoding="async"
+                            fetchPriority={index < 2 ? "high" : "low"}
+                            width={640}
+                            height={384}
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                         </div>

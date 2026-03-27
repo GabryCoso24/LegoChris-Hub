@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Plus, Trash2, Upload, Users, Edit, GripVertical, Save, X, ArrowUpDown } from "lucide-react";
 import { API_ENDPOINTS, API_URL } from "@/lib/api";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { OptimizedImage } from "@/components/ui/OptimizedImage";
 
 type Team = { id?: number; name: string; role: string; description: string | null; avatar?: string | null; display_order?: number };
 
@@ -13,6 +14,8 @@ export default function TeamManager() {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [isReordering, setIsReordering] = useState(false);
   const [tempItems, setTempItems] = useState<Team[]>([]);
+  const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
+  const [dropPosition, setDropPosition] = useState<"before" | "after">("before");
 
   const uploadImage = async (file: File) => {
     const formData = new FormData();
@@ -108,20 +111,38 @@ export default function TeamManager() {
     setDraggedIndex(index);
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+
+    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+    const isUpperHalf = e.clientY < rect.top + rect.height / 2;
+    setDropTargetIndex(index);
+    setDropPosition(isUpperHalf ? "before" : "after");
   };
 
-  const handleDrop = async (dropIndex: number) => {
-    if (draggedIndex === null || draggedIndex === dropIndex) {
+  const handleDrop = () => {
+    if (draggedIndex === null || dropTargetIndex === null) {
       setDraggedIndex(null);
+      setDropTargetIndex(null);
+      return;
+    }
+
+    let insertIndex = dropTargetIndex + (dropPosition === "after" ? 1 : 0);
+    if (insertIndex > draggedIndex) {
+      insertIndex -= 1;
+    }
+
+    if (insertIndex === draggedIndex) {
+      setDraggedIndex(null);
+      setDropTargetIndex(null);
       return;
     }
 
     const currentItems = isReordering ? tempItems : items;
     const newItems = [...currentItems];
     const [draggedItem] = newItems.splice(draggedIndex, 1);
-    newItems.splice(dropIndex, 0, draggedItem);
+    newItems.splice(insertIndex, 0, draggedItem);
 
     if (isReordering) {
       setTempItems(newItems);
@@ -129,6 +150,7 @@ export default function TeamManager() {
       setItems(newItems);
     }
     setDraggedIndex(null);
+    setDropTargetIndex(null);
   };
 
   const startReordering = () => {
@@ -140,6 +162,7 @@ export default function TeamManager() {
     setTempItems([]);
     setIsReordering(false);
     setDraggedIndex(null);
+    setDropTargetIndex(null);
   };
 
   const saveReordering = async () => {
@@ -162,6 +185,7 @@ export default function TeamManager() {
       setItems(updatedItems);
       setIsReordering(false);
       setTempItems([]);
+      setDropTargetIndex(null);
     } catch (e) {
       console.error("Reorder failed", e);
     }
@@ -191,7 +215,7 @@ export default function TeamManager() {
         <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 mb-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <GripVertical className="w-5 h-5 text-primary" />
-            <span className="text-sm font-medium text-primary">Modalità Riordina: Trascina gli elementi per cambiar ordine</span>
+            <span className="text-sm font-medium text-primary">Modalita Riordina: Trascina gli elementi per cambiar ordine</span>
           </div>
           <div className="flex gap-2">
             <button
@@ -214,82 +238,82 @@ export default function TeamManager() {
 
       {!isReordering && (
         <div className="bg-background/50 p-6 rounded-lg border border-border mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-          <input
-            className="px-4 py-3 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-            placeholder="Nome team"
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          />
-          <Select
-            value={form.role}
-            onValueChange={(value) => setForm((f) => ({ ...f, role: value }))}
-          >
-            <SelectTrigger className="h-[50px] px-4 py-3 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary">
-              <SelectValue placeholder="Seleziona ruolo" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Team Base">Team Base</SelectItem>
-              <SelectItem value="Team Plus">Team Plus</SelectItem>
-            </SelectContent>
-          </Select>
-          <input
-            className="px-4 py-3 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-            placeholder="Descrizione"
-            value={form.description || ""}
-            onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-          />
-        </div>
-        <div className="flex flex-wrap items-center gap-4">
-          <label className="flex items-center gap-2 px-4 py-2 bg-muted hover:bg-muted/80 rounded-lg cursor-pointer transition-colors border border-border">
-            <Upload className="w-4 h-4" />
-            <span className="text-sm font-medium">
-              {uploading ? "Caricamento..." : "Carica Foto"}
-            </span>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
             <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => e.target.files?.[0] && uploadImage(e.target.files[0])}
-              className="hidden"
-              disabled={uploading}
+              className="px-4 py-3 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder="Nome team"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             />
-          </label>
-          {form.avatar && (
-            <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 rounded-lg border border-primary/20">
-              <img src={form.avatar} alt="Preview" className="w-8 h-8 rounded-full object-cover" />
-              <span className="text-xs text-primary font-medium">Foto caricata</span>
-            </div>
-          )}
-          {editingId ? (
-            <>
+            <Select
+              value={form.role}
+              onValueChange={(value) => setForm((f) => ({ ...f, role: value }))}
+            >
+              <SelectTrigger className="h-[50px] px-4 py-3 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary">
+                <SelectValue placeholder="Seleziona ruolo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Team Base">Team Base</SelectItem>
+                <SelectItem value="Team Plus">Team Plus</SelectItem>
+              </SelectContent>
+            </Select>
+            <input
+              className="px-4 py-3 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder="Descrizione"
+              value={form.description || ""}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-4">
+            <label className="flex items-center gap-2 px-4 py-2 bg-muted hover:bg-muted/80 rounded-lg cursor-pointer transition-colors border border-border">
+              <Upload className="w-4 h-4" />
+              <span className="text-sm font-medium">
+                {uploading ? "Caricamento..." : "Carica Foto"}
+              </span>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => e.target.files?.[0] && uploadImage(e.target.files[0])}
+                className="hidden"
+                disabled={uploading}
+              />
+            </label>
+            {form.avatar && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 rounded-lg border border-primary/20">
+                <OptimizedImage src={form.avatar} alt="Preview" className="w-8 h-8 rounded-full object-cover" loading="eager" decoding="async" fetchPriority="low" width={32} height={32} />
+                <span className="text-xs text-primary font-medium">Foto caricata</span>
+              </div>
+            )}
+            {editingId ? (
+              <>
+                <button
+                  className="flex items-center gap-2 px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ml-auto"
+                  onClick={saveEdit}
+                  disabled={uploading || !form.name || !form.role}
+                >
+                  <Save className="w-4 h-4" />
+                  Salva Modifiche
+                </button>
+                <button
+                  className="flex items-center gap-2 px-6 py-3 bg-muted hover:bg-muted/80 rounded-lg font-medium transition-colors"
+                  onClick={cancelEdit}
+                >
+                  <X className="w-4 h-4" />
+                  Annulla
+                </button>
+              </>
+            ) : (
               <button
                 className="flex items-center gap-2 px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ml-auto"
-                onClick={saveEdit}
+                onClick={add}
                 disabled={uploading || !form.name || !form.role}
               >
-                <Save className="w-4 h-4" />
-                Salva Modifiche
+                <Plus className="w-4 h-4" />
+                Aggiungi Team
               </button>
-              <button
-                className="flex items-center gap-2 px-6 py-3 bg-muted hover:bg-muted/80 rounded-lg font-medium transition-colors"
-                onClick={cancelEdit}
-              >
-                <X className="w-4 h-4" />
-                Annulla
-              </button>
-            </>
-          ) : (
-            <button
-              className="flex items-center gap-2 px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ml-auto"
-              onClick={add}
-              disabled={uploading || !form.name || !form.role}
-            >
-              <Plus className="w-4 h-4" />
-              Aggiungi Team
-            </button>
-          )}
+            )}
+          </div>
         </div>
-      </div>
       )}
 
       <div className="grid gap-3">
@@ -300,59 +324,68 @@ export default function TeamManager() {
           </div>
         ) : (
           (isReordering ? tempItems : items).map((it, index) => (
-            <div
-              key={it.id}
-              draggable={isReordering}
-              onDragStart={() => isReordering && handleDragStart(index)}
-              onDragOver={handleDragOver}
-              onDrop={() => isReordering && handleDrop(index)}
-              className={`flex items-center justify-between bg-background/50 hover:bg-background/80 p-4 rounded-lg border border-border transition-colors group ${
-                draggedIndex === index ? "opacity-50" : ""
-              } ${isReordering ? "cursor-move" : ""}`}
-            >
-              <div className="flex items-center gap-4 flex-1">
-                {isReordering && (
-                  <div className="cursor-move">
-                    <GripVertical className="w-5 h-5 text-muted-foreground" />
-                  </div>
-                )}
-                {!isReordering && (
-                  <div className="cursor-move opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                    <GripVertical className="w-5 h-5 text-muted-foreground" />
-                  </div>
-                )}
-                {it.avatar ? (
-                  <img src={it.avatar} alt={it.name} className="w-14 h-14 rounded-full object-cover border-2 border-primary/20" />
-                ) : (
-                  <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center">
-                    <Users className="w-6 h-6 text-muted-foreground" />
-                  </div>
-                )}
-                <div>
-                  <div className="font-semibold text-lg">{it.name}</div>
-                  <div className="text-sm text-foreground/60">{it.role}</div>
-                  {it.description && (
-                    <div className="text-xs text-foreground/50 mt-1">{it.description}</div>
+            <div key={it.id}>
+              {isReordering && dropTargetIndex === index && dropPosition === "before" && draggedIndex !== index && (
+                <div className="reorder-placeholder" />
+              )}
+              <div
+                draggable={isReordering}
+                onDragStart={() => isReordering && handleDragStart(index)}
+                onDragOver={(e) => isReordering && handleDragOver(e, index)}
+                onDrop={() => isReordering && handleDrop()}
+                onDragEnd={() => {
+                  setDraggedIndex(null);
+                  setDropTargetIndex(null);
+                }}
+                className={`reorder-item flex items-center justify-between bg-background/50 hover:bg-background/80 p-4 rounded-lg border border-border transition-colors group ${
+                  draggedIndex === index ? "reorder-item-source-hidden" : ""
+                } ${isReordering ? "cursor-move" : ""}`}
+              >
+                <div className="flex items-center gap-4 flex-1">
+                  {isReordering && (
+                    <div className="cursor-move">
+                      <GripVertical className="w-5 h-5 text-muted-foreground" />
+                    </div>
                   )}
+                  {!isReordering && (
+                    <div className="cursor-move opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                      <GripVertical className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                  )}
+                  {it.avatar ? (
+                    <OptimizedImage src={it.avatar} alt={it.name} className="w-14 h-14 rounded-full object-cover border-2 border-primary/20" loading="lazy" decoding="async" fetchPriority="low" width={56} height={56} />
+                  ) : (
+                    <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center">
+                      <Users className="w-6 h-6 text-muted-foreground" />
+                    </div>
+                  )}
+                  <div>
+                    <div className="font-semibold text-lg">{it.name}</div>
+                    <div className="text-sm text-foreground/60">{it.role}</div>
+                    {it.description && <div className="text-xs text-foreground/50 mt-1">{it.description}</div>}
+                  </div>
                 </div>
+                {!isReordering && (
+                  <div className="flex items-center gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                    <button
+                      className="flex items-center gap-2 px-3 py-2 md:px-4 text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                      onClick={() => startEdit(it)}
+                    >
+                      <Edit className="w-4 h-4" />
+                      <span className="text-sm font-medium hidden sm:inline">Modifica</span>
+                    </button>
+                    <button
+                      className="flex items-center gap-2 px-3 py-2 md:px-4 text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                      onClick={() => remove(it.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span className="text-sm font-medium hidden sm:inline">Rimuovi</span>
+                    </button>
+                  </div>
+                )}
               </div>
-              {!isReordering && (
-                <div className="flex items-center gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                  <button
-                    className="flex items-center gap-2 px-3 py-2 md:px-4 text-primary hover:bg-primary/10 rounded-lg transition-colors"
-                    onClick={() => startEdit(it)}
-                  >
-                    <Edit className="w-4 h-4" />
-                    <span className="text-sm font-medium hidden sm:inline">Modifica</span>
-                  </button>
-                  <button
-                    className="flex items-center gap-2 px-3 py-2 md:px-4 text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
-                    onClick={() => remove(it.id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    <span className="text-sm font-medium hidden sm:inline">Rimuovi</span>
-                  </button>
-                </div>
+              {isReordering && dropTargetIndex === index && dropPosition === "after" && draggedIndex !== index && (
+                <div className="reorder-placeholder" />
               )}
             </div>
           ))

@@ -5,6 +5,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { OptimizedImage } from "@/components/ui/OptimizedImage";
 import { format, formatDistanceToNow } from "date-fns";
 import { it as itLocale } from "date-fns/locale";
 import {
@@ -49,6 +50,8 @@ export default function VideosManager() {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [isReordering, setIsReordering] = useState(false);
   const [tempItems, setTempItems] = useState<Video[]>([]);
+  const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
+  const [dropPosition, setDropPosition] = useState<"before" | "after">("before");
 
   const uploadImage = async (file: File) => {
     const formData = new FormData();
@@ -167,20 +170,38 @@ export default function VideosManager() {
     setDraggedIndex(index);
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+
+    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+    const isUpperHalf = e.clientY < rect.top + rect.height / 2;
+    setDropTargetIndex(index);
+    setDropPosition(isUpperHalf ? "before" : "after");
   };
 
-  const handleDrop = (dropIndex: number) => {
-    if (draggedIndex === null || draggedIndex === dropIndex) {
+  const handleDrop = () => {
+    if (draggedIndex === null || dropTargetIndex === null) {
       setDraggedIndex(null);
+      setDropTargetIndex(null);
+      return;
+    }
+
+    let insertIndex = dropTargetIndex + (dropPosition === "after" ? 1 : 0);
+    if (insertIndex > draggedIndex) {
+      insertIndex -= 1;
+    }
+
+    if (insertIndex === draggedIndex) {
+      setDraggedIndex(null);
+      setDropTargetIndex(null);
       return;
     }
 
     const currentItems = isReordering ? tempItems : items;
     const newItems = [...currentItems];
     const [draggedItem] = newItems.splice(draggedIndex, 1);
-    newItems.splice(dropIndex, 0, draggedItem);
+    newItems.splice(insertIndex, 0, draggedItem);
 
     if (isReordering) {
       setTempItems(newItems);
@@ -188,6 +209,7 @@ export default function VideosManager() {
       setItems(newItems);
     }
     setDraggedIndex(null);
+    setDropTargetIndex(null);
   };
 
   const startReordering = () => {
@@ -200,6 +222,7 @@ export default function VideosManager() {
     setTempItems([]);
     setIsReordering(false);
     setDraggedIndex(null);
+    setDropTargetIndex(null);
   };
 
   const saveReordering = async () => {
@@ -224,6 +247,7 @@ export default function VideosManager() {
       setItems(updatedItems);
       setIsReordering(false);
       setTempItems([]);
+      setDropTargetIndex(null);
     } catch (e) {
       console.error("Reorder failed", e);
     }
@@ -401,7 +425,7 @@ export default function VideosManager() {
           </label>
           {form.thumbnail && (
             <div className="flex items-center gap-2 px-3 py-2 bg-primary/10 rounded-lg border border-primary/20">
-              <img src={form.thumbnail} alt="Preview" className="w-12 h-8 rounded object-cover" />
+              <OptimizedImage src={form.thumbnail} alt="Preview" className="w-12 h-8 rounded object-cover" loading="eager" decoding="async" fetchPriority="low" width={48} height={32} />
               <span className="text-xs text-primary font-medium">Miniatura caricata</span>
             </div>
           )}
@@ -444,14 +468,21 @@ export default function VideosManager() {
           </div>
         ) : (
           (isReordering ? tempItems : items).map((it, index) => (
-            <div
-              key={it.id}
-              draggable={isReordering}
-              onDragStart={() => handleDragStart(index)}
-              onDragOver={handleDragOver}
-              onDrop={() => handleDrop(index)}
-              className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-card/50 p-4 rounded-lg border border-border hover:border-primary/50 transition-colors group"
-            >
+            <div key={it.id}>
+              {isReordering && dropTargetIndex === index && dropPosition === "before" && draggedIndex !== index && (
+                <div className="reorder-placeholder" />
+              )}
+              <div
+                draggable={isReordering}
+                onDragStart={() => handleDragStart(index)}
+                onDragOver={(e) => handleDragOver(e, index)}
+                onDrop={() => handleDrop()}
+                onDragEnd={() => {
+                  setDraggedIndex(null);
+                  setDropTargetIndex(null);
+                }}
+                className={`reorder-item flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-card/50 p-4 rounded-lg border border-border hover:border-primary/50 transition-colors group ${draggedIndex === index ? "reorder-item-source-hidden" : ""}`}
+              >
               <div className="flex items-center gap-3 md:gap-4 flex-1">
                 {isReordering && (
                   <div className="cursor-grab active:cursor-grabbing text-foreground/50">
@@ -459,10 +490,15 @@ export default function VideosManager() {
                   </div>
                 )}
                 {it.thumbnail && (
-                  <img
+                  <OptimizedImage
                     src={it.thumbnail}
                     alt={it.title}
                     className="w-32 h-20 rounded-lg object-cover flex-shrink-0"
+                    loading="lazy"
+                    decoding="async"
+                    fetchPriority="low"
+                    width={128}
+                    height={80}
                   />
                 )}
                 <div className="flex-1 min-w-0">
@@ -494,6 +530,10 @@ export default function VideosManager() {
                   <span className="font-medium">Rimuovi</span>
                 </button>
               </div>
+              </div>
+              {isReordering && dropTargetIndex === index && dropPosition === "after" && draggedIndex !== index && (
+                <div className="reorder-placeholder" />
+              )}
             </div>
           ))
         )}

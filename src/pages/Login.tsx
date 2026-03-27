@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import LogoSVG from "@/assets/logo-MT-team-sticker.svg";
+import { OptimizedImage } from "@/components/ui/OptimizedImage";
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -94,7 +95,7 @@ const Login = () => {
             <div className="max-w-md mx-auto">
               <div className="text-center mb-8">
                 <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-4">
-                  <img src={LogoSVG} alt="LegoChris Logo" className="w-[4.5rem] h-[4.5rem] logo-glow" />
+                  <OptimizedImage src={LogoSVG} alt="LegoChris Logo" className="w-[4.5rem] h-[4.5rem] logo-glow" loading="eager" decoding="async" fetchPriority="high" width={72} height={72} />
                 </div>
                 <h1 className="font-display text-3xl md:text-4xl font-bold mb-2">
                   Bentornato <span className="gradient-text">!</span>

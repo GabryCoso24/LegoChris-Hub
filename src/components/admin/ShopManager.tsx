@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { API_ENDPOINTS, API_URL } from "@/lib/api";
+import { OptimizedImage } from "@/components/ui/OptimizedImage";
 
 type Product = { 
   id?: number; 
@@ -830,7 +831,7 @@ export default function ShopManager() {
                 const isPrimary = form.primary_color && img.color === form.primary_color && form.images?.findIndex(i => i.color === form.primary_color) === idx;
                 return (
                   <div key={idx} className="relative group">
-                    <img src={img.url} alt={`${idx + 1}`} className={`w-16 h-16 rounded object-cover border-2 ${isPrimary ? 'border-primary' : 'border-border'}`} />
+                    <OptimizedImage src={img.url} alt={`${idx + 1}`} className={`w-16 h-16 rounded object-cover border-2 ${isPrimary ? 'border-primary' : 'border-border'}`} loading="lazy" decoding="async" fetchPriority="low" width={64} height={64} />
                     <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-background border border-border text-[10px] px-1.5 py-0.5 rounded whitespace-nowrap shadow-sm flex items-center gap-1">
                       <div
                         className="w-2 h-2 rounded-full flex-shrink-0"
@@ -912,7 +913,7 @@ export default function ShopManager() {
                   const mainImage = getMainImage();
                   
                   return mainImage ? (
-                    <img src={mainImage} alt={it.title} className="w-16 h-16 md:w-20 md:h-20 rounded-lg object-cover border-2 border-primary/20 flex-shrink-0" />
+                    <OptimizedImage src={mainImage} alt={it.title} className="w-16 h-16 md:w-20 md:h-20 rounded-lg object-cover border-2 border-primary/20 flex-shrink-0" loading="lazy" decoding="async" fetchPriority="low" width={80} height={80} />
                   ) : (
                     <div className="w-16 h-16 md:w-20 md:h-20 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
                       <Package className="w-6 h-6 md:w-8 md:h-8 text-muted-foreground" />

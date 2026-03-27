@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar, Trash2, GripVertical, Video, Radio, Upload, X, User, Edit } from "lucide-react";
 import { API_ENDPOINTS, API_URL } from "@/lib/api";
+import { OptimizedImage } from "@/components/ui/OptimizedImage";
 import { useTeamPlus } from "@/hooks/use-team-plus";
 import {
   AlertDialog,
@@ -73,6 +74,8 @@ export default function TeamPlusScheduleManager() {
     thumbnail: '',
   });
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
+  const [dropPosition, setDropPosition] = useState<"before" | "after">("before");
   const [isLoading, setIsLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -250,19 +253,14 @@ export default function TeamPlusScheduleManager() {
     e.preventDefault();
     if (draggedIndex === null || draggedIndex === index) return;
 
-    const newItems = [...scheduleItems];
-    const draggedItem = newItems[draggedIndex];
-    newItems.splice(draggedIndex, 1);
-    newItems.splice(index, 0, draggedItem);
-
-    setScheduleItems(newItems);
-    setDraggedIndex(index);
+    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+    const isUpperHalf = e.clientY < rect.top + rect.height / 2;
+    setDropTargetIndex(index);
+    setDropPosition(isUpperHalf ? "before" : "after");
   };
 
-  const handleDragEnd = async () => {
-    if (draggedIndex === null) return;
-
-    const updatedItems = scheduleItems.map((item, index) => ({
+  const persistReorder = async (nextItems: TeamPlusScheduleItem[]) => {
+    const updatedItems = nextItems.map((item, index) => ({
       ...item,
       display_order: index,
     }));
@@ -286,8 +284,33 @@ export default function TeamPlusScheduleManager() {
       });
       fetchSchedule();
     }
+  };
 
+  const handleDrop = async () => {
+    if (draggedIndex === null || dropTargetIndex === null) {
+      setDraggedIndex(null);
+      setDropTargetIndex(null);
+      return;
+    }
+
+    let insertIndex = dropTargetIndex + (dropPosition === "after" ? 1 : 0);
+    if (insertIndex > draggedIndex) {
+      insertIndex -= 1;
+    }
+
+    if (insertIndex === draggedIndex) {
+      setDraggedIndex(null);
+      setDropTargetIndex(null);
+      return;
+    }
+
+    const nextItems = [...scheduleItems];
+    const [draggedItem] = nextItems.splice(draggedIndex, 1);
+    nextItems.splice(insertIndex, 0, draggedItem);
+    setScheduleItems(nextItems);
     setDraggedIndex(null);
+    setDropTargetIndex(null);
+    await persistReorder(nextItems);
   };
 
   const getDayLabel = (dayOfWeek: number) => {
@@ -433,10 +456,15 @@ export default function TeamPlusScheduleManager() {
                 </label>
                 {formData.thumbnail && (
                   <div className="mt-2">
-                    <img
+                    <OptimizedImage
                       src={formData.thumbnail.startsWith('http') ? formData.thumbnail : `${API_URL}${formData.thumbnail}`}
                       alt="Schedule thumbnail"
                       className="w-24 h-14 md:w-32 md:h-18 object-cover rounded-lg"
+                      loading="eager"
+                      decoding="async"
+                      fetchPriority="low"
+                      width={128}
+                      height={72}
                     />
                   </div>
                 )}
@@ -502,22 +530,34 @@ export default function TeamPlusScheduleManager() {
           ) : (
             <div className="space-y-2 md:space-y-3">
               {scheduleItems.map((item, index) => (
-                <div
-                  key={item.id}
-                  draggable
-                  onDragStart={() => handleDragStart(index)}
-                  onDragOver={(e) => handleDragOver(e, index)}
-                  onDragEnd={handleDragEnd}
-                  className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 md:p-4 bg-secondary/50 rounded-lg cursor-move hover:bg-secondary transition-colors group"
-                >
+                <div key={item.id}>
+                  {dropTargetIndex === index && dropPosition === "before" && draggedIndex !== index && (
+                    <div className="reorder-placeholder" />
+                  )}
+                  <div
+                    draggable
+                    onDragStart={() => handleDragStart(index)}
+                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDrop={handleDrop}
+                    onDragEnd={() => {
+                      setDraggedIndex(null);
+                      setDropTargetIndex(null);
+                    }}
+                    className={`reorder-item flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 md:p-4 bg-secondary/50 rounded-lg cursor-move hover:bg-secondary transition-colors group ${draggedIndex === index ? "reorder-item-source-hidden" : ""}`}
+                  >
                   <div className="flex items-center gap-3 flex-1">
                     <GripVertical className="h-4 w-4 md:h-5 md:w-5 text-muted-foreground hidden sm:block flex-shrink-0" />
                     
                     {item.thumbnail && (
-                      <img
+                      <OptimizedImage
                         src={item.thumbnail}
                         alt={item.title}
                         className="h-10 w-10 md:h-12 md:w-12 object-cover rounded flex-shrink-0"
+                        loading="lazy"
+                        decoding="async"
+                        fetchPriority="low"
+                        width={48}
+                        height={48}
                       />
                     )}
                     
@@ -564,6 +604,10 @@ export default function TeamPlusScheduleManager() {
                       <span className="font-medium">Rimuovi</span>
                     </button>
                   </div>
+                  </div>
+                  {dropTargetIndex === index && dropPosition === "after" && draggedIndex !== index && (
+                    <div className="reorder-placeholder" />
+                  )}
                 </div>
               ))}
             </div>

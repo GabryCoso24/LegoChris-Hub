@@ -10,6 +10,7 @@ import { useAdmin } from "@/hooks/use-admin";
 import { useTeamPlus } from "@/hooks/use-team-plus";
 import { useToast } from "@/hooks/use-toast";
 import LogoSVG from "@/assets/logo-MT-team-sticker.svg";
+import { OptimizedImage } from "@/components/ui/OptimizedImage";
 
 const navItems = [
   { label: "Home", href: "/" },
@@ -75,7 +76,7 @@ export function Navbar() {
         <div className="flex items-center col-start-1">
           <Link to="/" className="flex items-center gap-2 group">
             <div className="w-12 h-12 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
-              <img src={LogoSVG} alt="LegoChris" className="w-11 h-11 logo-glow" />
+              <OptimizedImage src={LogoSVG} alt="LegoChris" className="w-11 h-11 logo-glow" loading="eager" decoding="async" fetchPriority="high" width={44} height={44} />
             </div>
             <span className="font-display text-xl font-bold gradient-text hidden sm:block">
               LegoChris

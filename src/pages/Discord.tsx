@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import LogoSVG from "@/assets/logo-MT-team-sticker.svg";
+import { OptimizedImage } from "@/components/ui/OptimizedImage";
 
 const benefits = [
   {
@@ -105,7 +106,7 @@ const Discord = () => {
                 <div className="glass-card rounded-2xl p-8 glow-border text-center">
                   <div className="flex items-center justify-center gap-3 mb-6">
                     <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <img src={LogoSVG} alt="LegoChris Logo" className="w-12 h-12 logo-glow" />
+                      <OptimizedImage src={LogoSVG} alt="LegoChris Logo" className="w-12 h-12 logo-glow" loading="eager" decoding="async" fetchPriority="high" width={48} height={48} />
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />

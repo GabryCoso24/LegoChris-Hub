@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { API_ENDPOINTS, API_URL } from "@/lib/api";
+import { OptimizedImage } from "@/components/ui/OptimizedImage";
 
 type Playlist = {
   id: number;
@@ -89,10 +90,15 @@ const Videos = () => {
                   <div className="glass-card rounded-2xl overflow-hidden hover-lift">
                     <div className="relative aspect-video overflow-hidden bg-muted">
                       {playlist.thumbnail ? (
-                        <img
+                        <OptimizedImage
                           src={playlist.thumbnail.startsWith('http') ? playlist.thumbnail : `${API_URL}${playlist.thumbnail}`}
                           alt={playlist.title}
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          loading={index === 0 ? "eager" : "lazy"}
+                          decoding="async"
+                          fetchPriority={index === 0 ? "high" : "low"}
+                          width={640}
+                          height={360}
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center bg-primary/10">

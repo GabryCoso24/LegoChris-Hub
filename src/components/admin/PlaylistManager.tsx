@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Plus, Trash2, ListVideo, Edit, Save, X, Upload, GripVertical, ArrowUpDown } from "lucide-react";
 import { API_ENDPOINTS, API_URL } from "@/lib/api";
+import { OptimizedImage } from "@/components/ui/OptimizedImage";
 
 type Playlist = { id?: number; title: string; description: string | null; video_ids: number[] | null; youtube_link?: string | null; thumbnail?: string | null; display_order?: number };
 
@@ -12,6 +13,8 @@ export default function PlaylistManager() {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [isReordering, setIsReordering] = useState(false);
   const [tempItems, setTempItems] = useState<Playlist[]>([]);
+  const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
+  const [dropPosition, setDropPosition] = useState<"before" | "after">("before");
 
   const uploadImage = async (file: File) => {
     const formData = new FormData();
@@ -101,20 +104,38 @@ export default function PlaylistManager() {
     setDraggedIndex(index);
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+
+    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+    const isUpperHalf = e.clientY < rect.top + rect.height / 2;
+    setDropTargetIndex(index);
+    setDropPosition(isUpperHalf ? "before" : "after");
   };
 
-  const handleDrop = (dropIndex: number) => {
-    if (draggedIndex === null || draggedIndex === dropIndex) {
+  const handleDrop = () => {
+    if (draggedIndex === null || dropTargetIndex === null) {
       setDraggedIndex(null);
+      setDropTargetIndex(null);
+      return;
+    }
+
+    let insertIndex = dropTargetIndex + (dropPosition === "after" ? 1 : 0);
+    if (insertIndex > draggedIndex) {
+      insertIndex -= 1;
+    }
+
+    if (insertIndex === draggedIndex) {
+      setDraggedIndex(null);
+      setDropTargetIndex(null);
       return;
     }
 
     const currentItems = isReordering ? tempItems : items;
     const newItems = [...currentItems];
     const [draggedItem] = newItems.splice(draggedIndex, 1);
-    newItems.splice(dropIndex, 0, draggedItem);
+    newItems.splice(insertIndex, 0, draggedItem);
 
     if (isReordering) {
       setTempItems(newItems);
@@ -122,6 +143,7 @@ export default function PlaylistManager() {
       setItems(newItems);
     }
     setDraggedIndex(null);
+    setDropTargetIndex(null);
   };
 
   const startReordering = () => {
@@ -134,6 +156,7 @@ export default function PlaylistManager() {
     setTempItems([]);
     setIsReordering(false);
     setDraggedIndex(null);
+    setDropTargetIndex(null);
   };
 
   const saveReordering = async () => {
@@ -158,6 +181,7 @@ export default function PlaylistManager() {
       setItems(updatedItems);
       setIsReordering(false);
       setTempItems([]);
+      setDropTargetIndex(null);
     } catch (e) {
       console.error("Reorder failed", e);
     }
@@ -253,10 +277,15 @@ export default function PlaylistManager() {
           </label>
           {form.thumbnail && (
             <div className="mt-2">
-              <img
+              <OptimizedImage
                 src={form.thumbnail.startsWith('http') ? form.thumbnail : `${API_URL}${form.thumbnail}`}
                 alt="Playlist thumbnail"
                 className="w-24 h-14 md:w-32 md:h-18 object-cover rounded-lg"
+                loading="eager"
+                decoding="async"
+                fetchPriority="low"
+                width={128}
+                height={72}
               />
             </div>
           )}
@@ -301,14 +330,21 @@ export default function PlaylistManager() {
           </div>
         ) : (
           (isReordering ? tempItems : items).map((it, index) => (
-            <div
-              key={it.id}
-              draggable={isReordering}
-              onDragStart={() => handleDragStart(index)}
-              onDragOver={handleDragOver}
-              onDrop={() => handleDrop(index)}
-              className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-background/50 hover:bg-background/80 p-3 md:p-4 rounded-lg border border-border transition-colors group gap-3"
-            >
+            <div key={it.id}>
+              {isReordering && dropTargetIndex === index && dropPosition === "before" && draggedIndex !== index && (
+                <div className="reorder-placeholder" />
+              )}
+              <div
+                draggable={isReordering}
+                onDragStart={() => handleDragStart(index)}
+                onDragOver={(e) => handleDragOver(e, index)}
+                onDrop={() => handleDrop()}
+                onDragEnd={() => {
+                  setDraggedIndex(null);
+                  setDropTargetIndex(null);
+                }}
+                className={`reorder-item flex flex-col sm:flex-row items-start sm:items-center justify-between bg-background/50 hover:bg-background/80 p-3 md:p-4 rounded-lg border border-border transition-colors group gap-3 ${draggedIndex === index ? "reorder-item-source-hidden" : ""}`}
+              >
               <div className="flex items-center gap-3 md:gap-4 flex-1">
                 {isReordering && (
                   <div className="cursor-grab active:cursor-grabbing text-foreground/50">
@@ -348,6 +384,10 @@ export default function PlaylistManager() {
                   <span className="font-medium">Rimuovi</span>
                 </button>
               </div>
+              </div>
+              {isReordering && dropTargetIndex === index && dropPosition === "after" && draggedIndex !== index && (
+                <div className="reorder-placeholder" />
+              )}
             </div>
           ))
         )}

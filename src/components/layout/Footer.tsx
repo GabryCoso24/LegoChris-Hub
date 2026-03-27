@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Youtube, Instagram } from "lucide-react";
 import LogoSVG from "@/assets/logo-MT-team-sticker.svg";
+import { OptimizedImage } from "@/components/ui/OptimizedImage";
 
 const TikTokIcon = () => (
   <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
@@ -46,7 +47,7 @@ export function Footer() {
           <div className="lg:col-span-2">
             <Link to="/" className="flex items-center gap-2 mb-4">
               <div className="w-12 h-12 rounded-lg flex items-center justify-center">
-                <img src={LogoSVG} alt="LegoChris Logo" className="w-11 h-11 logo-glow" />
+                <OptimizedImage src={LogoSVG} alt="LegoChris Logo" className="w-11 h-11 logo-glow" loading="lazy" decoding="async" fetchPriority="low" width={44} height={44} />
               </div>
               <span className="font-display text-xl font-bold gradient-text">
                 LegoChris
