@@ -789,18 +789,22 @@ function generateNodeBody(node) {
       const description = String(config.description || value || "embed").replace(/"""/g, "'''");
       const title = String(config.title || "").replace(/"""/g, "'''");
       const color = String(config.color || "").replace(/"""/g, "'''");
-      const url = String(config.url || "").replace(/"""/g, "'''");
       const footer = String(config.footer || "").replace(/"""/g, "'''");
       const footerIcon = String(config.footerIconUrl || "").replace(/"""/g, "'''");
       const authorName = String(config.authorName || "").replace(/"""/g, "'''");
       const authorIcon = String(config.authorIconUrl || "").replace(/"""/g, "'''");
-      const authorUrl = String(config.authorUrl || "").replace(/"""/g, "'''");
       const thumbnailUrl = String(config.thumbnailUrl || "").replace(/"""/g, "'''");
       const imageUrl = String(config.imageUrl || "").replace(/"""/g, "'''");
+      const componentMode = String(config.componentMode || "none").replace(/"""/g, "'''");
+      const buttonsJson = String(config.buttonsJson || "[]").replace(/"""/g, "'''");
+      const selectPlaceholder = String(config.selectPlaceholder || "Scegli un'opzione").replace(/"""/g, "'''");
+      const selectOptionsJson = String(config.selectOptionsJson || "[]").replace(/"""/g, "'''");
+      const selectMinValues = String(config.selectMinValues || "1").replace(/"""/g, "'''");
+      const selectMaxValues = String(config.selectMaxValues || "1").replace(/"""/g, "'''");
       const fieldsJson = String(config.fieldsJson || "[]").replace(/"""/g, "'''");
       const timestampMode = String(config.timestampMode || (String(config.timestamp || "false").toLowerCase() === "true" ? "auto" : "none")).replace(/"""/g, "'''");
       const timestampValue = String(config.timestampValue || "").replace(/"""/g, "'''");
-      return `embed = discord.Embed(\n    title=self._render_template("""${title}""", variables) or None,\n    description=self._render_template("""${description}""", variables) or None,\n    color=self._parse_embed_color(self._render_template("""${color}""", variables)),\n    url=self._render_template("""${url}""", variables) or None,\n)\nself._apply_embed_author(embed, variables, """${authorName}""", """${authorIcon}""", """${authorUrl}""")\nself._apply_embed_footer(embed, variables, """${footer}""", """${footerIcon}""")\nself._apply_embed_media(embed, variables, """${thumbnailUrl}""", """${imageUrl}""")\nself._apply_embed_fields(embed, variables, """${fieldsJson}""")\nself._apply_embed_timestamp(embed, variables, """${timestampMode}""", """${timestampValue}""")\nawait self._send_embed(target, embed)\n`;
+      return `embed = discord.Embed(\n    title=self._render_template("""${title}""", variables) or None,\n    description=self._render_template("""${description}""", variables) or None,\n    color=self._parse_embed_color(self._render_template("""${color}""", variables)),\n)\nmedia_files = self._apply_embed_media(embed, variables, """${authorIcon}""", """${footerIcon}""", """${thumbnailUrl}""", """${imageUrl}""")\nself._apply_embed_author(embed, variables, """${authorName}""")\nself._apply_embed_footer(embed, variables, """${footer}""")\nself._apply_embed_fields(embed, variables, """${fieldsJson}""")\nself._apply_embed_timestamp(embed, variables, """${timestampMode}""", """${timestampValue}""")\nview = self._build_embed_view(target, variables, """${componentMode}""", """${buttonsJson}""", """${selectPlaceholder}""", """${selectOptionsJson}""", """${selectMinValues}""", """${selectMaxValues}""")\nawait self._send_embed(target, embed, media_files, view=view)\n`;
     }
     case "add_role":
     case "remove_role": {
@@ -960,14 +964,15 @@ async function compileFlowToCog(config, flow, options = {}) {
             return
         await target.send(message)
 
-    async def _send_embed(self, target, embed):
-        if isinstance(target, discord.Interaction):
-            if target.response.is_done():
-                await target.followup.send(embed=embed)
-            else:
-                await target.response.send_message(embed=embed)
-            return
-        await target.send(embed=embed)
+    async def _send_embed(self, target, embed, files=None, view=None):
+      files = list(files or [])
+      if isinstance(target, discord.Interaction):
+        if target.response.is_done():
+          await target.followup.send(embed=embed, files=files, view=view)
+        else:
+          await target.response.send_message(embed=embed, files=files, view=view)
+        return
+      await target.send(embed=embed, files=files, view=view)
 
     def _get_guild(self, target):
         return getattr(target, "guild", None)
@@ -1006,38 +1011,213 @@ async function compileFlowToCog(config, flow, options = {}) {
         except ValueError:
             return None
 
-    def _apply_embed_footer(self, embed, variables, text_value, icon_url_value):
+    def _apply_embed_footer(self, embed, variables, text_value):
         text = self._render_template(text_value, variables)
-        icon_url = self._render_template(icon_url_value, variables)
         kwargs = {}
         if text:
             kwargs["text"] = text
-        if icon_url:
-            kwargs["icon_url"] = icon_url
         if kwargs:
             embed.set_footer(**kwargs)
 
-    def _apply_embed_author(self, embed, variables, name_value, icon_url_value, url_value):
+    def _apply_embed_author(self, embed, variables, name_value):
         name = self._render_template(name_value, variables)
-        icon_url = self._render_template(icon_url_value, variables)
-        url = self._render_template(url_value, variables)
         kwargs = {}
         if name:
             kwargs["name"] = name
-        if icon_url:
-            kwargs["icon_url"] = icon_url
-        if url:
-            kwargs["url"] = url
         if kwargs:
             embed.set_author(**kwargs)
 
-    def _apply_embed_media(self, embed, variables, thumbnail_value, image_value):
-        thumbnail_url = self._render_template(thumbnail_value, variables)
-        image_url = self._render_template(image_value, variables)
+    def _sanitize_function_name(self, value):
+      raw = str(value or "").strip().lower()
+      normalized = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in raw)
+      normalized = "_".join(part for part in normalized.split("_") if part)
+      return normalized
+
+    async def _run_component_function(self, function_name, interaction, base_variables=None):
+      fn_name = self._sanitize_function_name(function_name)
+      if not fn_name:
+        return None
+      fn = getattr(self, fn_name, None)
+      if not callable(fn):
+        return None
+      scoped_variables = dict(base_variables or {})
+      scoped_variables["component_user_id"] = getattr(getattr(interaction, "user", None), "id", None)
+      scoped_variables["component_custom_id"] = getattr(getattr(interaction, "data", None), "get", lambda *_: None)("custom_id") if isinstance(getattr(interaction, "data", None), dict) else None
+      return await fn(interaction, scoped_variables)
+
+    def _button_style_from_value(self, value):
+      style = str(value or "primary").strip().lower()
+      if style == "secondary":
+        return discord.ButtonStyle.secondary
+      if style == "success":
+        return discord.ButtonStyle.success
+      if style == "danger":
+        return discord.ButtonStyle.danger
+      return discord.ButtonStyle.primary
+
+    def _parse_json_array(self, raw_value):
+      rendered = str(raw_value or "").strip()
+      if not rendered:
+        return []
+      try:
+        parsed = json.loads(rendered)
+      except json.JSONDecodeError:
+        return []
+      return parsed if isinstance(parsed, list) else []
+
+    def _is_remote_media(self, value):
+        lowered = str(value or "").strip().lower()
+        return lowered.startswith("http://") or lowered.startswith("https://") or lowered.startswith("attachment://")
+
+    def _resolve_local_media_path(self, value):
+        raw = str(value or "").strip()
+        if not raw:
+            return None
+        normalized = os.path.normpath(raw)
+        candidates = []
+        if os.path.isabs(normalized):
+            candidates.append(normalized)
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        candidates.extend([
+            os.path.abspath(os.path.join(base_dir, normalized)),
+            os.path.abspath(os.path.join(base_dir, "..", normalized)),
+            os.path.abspath(os.path.join(base_dir, "..", "..", normalized)),
+        ])
+        for candidate in candidates:
+            if os.path.isfile(candidate):
+                return candidate
+        return None
+
+    def _resolve_embed_media_reference(self, attachments, media_type, media_value):
+        value = str(media_value or "").strip()
+        if not value:
+            return ""
+        if self._is_remote_media(value):
+            return value
+        local_path = self._resolve_local_media_path(value)
+        if not local_path:
+            return ""
+        base_name = os.path.basename(local_path)
+        attachment_name = f"{media_type}_{base_name}"
+        try:
+            file_handle = discord.File(local_path, filename=attachment_name)
+        except Exception:
+            return ""
+        attachments.append(file_handle)
+        return f"attachment://{attachment_name}"
+
+    def _apply_embed_media(self, embed, variables, author_icon_value, footer_icon_value, thumbnail_value, image_value):
+        attachments = []
+        author_icon_url = self._resolve_embed_media_reference(attachments, "author_icon", self._render_template(author_icon_value, variables).strip())
+        footer_icon_url = self._resolve_embed_media_reference(attachments, "footer_icon", self._render_template(footer_icon_value, variables).strip())
+        thumbnail_url = self._resolve_embed_media_reference(attachments, "thumbnail", self._render_template(thumbnail_value, variables).strip())
+        image_url = self._resolve_embed_media_reference(attachments, "image", self._render_template(image_value, variables).strip())
+
         if thumbnail_url:
             embed.set_thumbnail(url=thumbnail_url)
         if image_url:
             embed.set_image(url=image_url)
+
+        if embed.author:
+            author_name = str(getattr(embed.author, "name", "") or "")
+          if author_name or author_icon_url:
+                kwargs = {}
+                if author_name:
+                    kwargs["name"] = author_name
+                if author_icon_url:
+                    kwargs["icon_url"] = author_icon_url
+                if kwargs:
+                    embed.set_author(**kwargs)
+
+        if embed.footer:
+            footer_text = str(getattr(embed.footer, "text", "") or "")
+            if footer_text or footer_icon_url:
+                kwargs = {}
+                if footer_text:
+                    kwargs["text"] = footer_text
+                if footer_icon_url:
+                    kwargs["icon_url"] = footer_icon_url
+                if kwargs:
+                    embed.set_footer(**kwargs)
+
+        return attachments
+
+          def _build_embed_view(self, target, variables, component_mode, buttons_json, select_placeholder, select_options_json, select_min_values, select_max_values):
+            mode = str(component_mode or "none").strip().lower()
+            if mode not in ("buttons", "select"):
+              return None
+
+            view = discord.ui.View(timeout=300)
+
+            if mode == "buttons":
+              buttons = self._parse_json_array(self._render_template(buttons_json, variables))
+              for index, item in enumerate(buttons[:5]):
+                if not isinstance(item, dict):
+                  continue
+                label = str(item.get("label") or f"Pulsante {index + 1}").strip()[:80]
+                function_name = str(item.get("functionName") or "").strip()
+                style = self._button_style_from_value(item.get("style"))
+                button = discord.ui.Button(label=label or f"Pulsante {index + 1}", style=style, custom_id=f"wf_btn_{index}_{self._sanitize_function_name(function_name) or 'none'}")
+
+                async def _button_callback(interaction, fn_name=function_name):
+                  if not interaction.response.is_done():
+                    await interaction.response.defer()
+                  await self._run_component_function(fn_name, interaction, variables)
+
+                button.callback = _button_callback
+                view.add_item(button)
+
+            elif mode == "select":
+              options_raw = self._parse_json_array(self._render_template(select_options_json, variables))
+              parsed_options = []
+              action_map = {}
+
+              for index, item in enumerate(options_raw[:25]):
+                if not isinstance(item, dict):
+                  continue
+                label = str(item.get("label") or f"Opzione {index + 1}").strip()[:100]
+                value = str(item.get("value") or f"option_{index + 1}").strip()[:100]
+                description = str(item.get("description") or "").strip()[:100]
+                fn_name = str(item.get("functionName") or "").strip()
+                if not label or not value:
+                  continue
+                parsed_options.append(discord.SelectOption(label=label, value=value, description=description or None))
+                action_map[value] = fn_name
+
+              if parsed_options:
+                max_allowed = len(parsed_options)
+                try:
+                  parsed_min = int(str(select_min_values or "1") or "1")
+                except ValueError:
+                  parsed_min = 1
+                try:
+                  parsed_max = int(str(select_max_values or "1") or "1")
+                except ValueError:
+                  parsed_max = 1
+                min_values = max(1, min(max_allowed, parsed_min))
+                max_values = max(min_values, min(max_allowed, parsed_max))
+
+                select = discord.ui.Select(
+                  placeholder=str(select_placeholder or "Scegli un'opzione")[:150],
+                  min_values=min_values,
+                  max_values=max_values,
+                  options=parsed_options,
+                  custom_id="wf_select",
+                )
+
+                async def _select_callback(interaction, mapping=action_map):
+                  data = getattr(interaction, "data", None)
+                  values = data.get("values") if isinstance(data, dict) else []
+                  selected_value = str(values[0]) if values else ""
+                  if not interaction.response.is_done():
+                    await interaction.response.defer()
+                  if selected_value:
+                    await self._run_component_function(mapping.get(selected_value, ""), interaction, variables)
+
+                select.callback = _select_callback
+                view.add_item(select)
+
+            return view if view.children else None
 
     def _apply_embed_fields(self, embed, variables, fields_json):
         rendered = self._render_template(fields_json, variables).strip()

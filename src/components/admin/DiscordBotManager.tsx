@@ -133,6 +133,10 @@ type AnsiSegment = {
   style: AnsiStyle;
 };
 
+const DATA_ROOT_OPTION = "__data_root__";
+const NO_FILE_OPTION = "__no_file__";
+const IMAGE_FILE_PATTERN = /\.(png|jpe?g|gif|webp|bmp|svg)$/i;
+
 type NodeTemplate = {
   type: BuilderNodeType;
   label: string;
@@ -235,14 +239,11 @@ function sanitizeBuilderName(value: string) {
 }
 
 function getDefaultBuilderNodes(): BuilderNode[] {
-  return [
-    { id: "n1", type: "trigger_command", label: "Trigger Command", payload: "welcome", x: 130, y: 80, prefix: "/" },
-    { id: "n2", type: "send_message", label: "Send Message", payload: "Benvenuto!", x: 500, y: 260 },
-  ];
+  return [];
 }
 
 function getDefaultBuilderEdges(): BuilderEdge[] {
-  return [{ id: "e1", from: "n1", to: "n2" }];
+  return [];
 }
 
 function getDefaultBuilderTargetPath(name: string) {
@@ -277,14 +278,26 @@ function getDefaultNodeConfig(type: BuilderNodeType): Record<string, string> {
         title: "Titolo embed",
         description: "Descrizione embed",
         color: "#f59e0b",
-        url: "",
         footer: "",
+        footerIconFolder: DATA_ROOT_OPTION,
+        footerIconFile: "",
         footerIconUrl: "",
         authorName: "",
+        authorIconFolder: DATA_ROOT_OPTION,
+        authorIconFile: "",
         authorIconUrl: "",
-        authorUrl: "",
+        thumbnailFolder: DATA_ROOT_OPTION,
+        thumbnailFile: "",
         thumbnailUrl: "",
+        imageFolder: DATA_ROOT_OPTION,
+        imageFile: "",
         imageUrl: "",
+        componentMode: "none",
+        buttonsJson: "[]",
+        selectPlaceholder: "Scegli un'opzione",
+        selectOptionsJson: "[]",
+        selectMinValues: "1",
+        selectMaxValues: "1",
         fieldsJson: "[]",
         timestamp: "false",
         timestampMode: "none",
@@ -444,6 +457,52 @@ function clampPercent(value: number | null | undefined) {
   return Math.max(0, Math.min(100, value));
 }
 
+function buildDataMediaPath(folderValue: string | undefined, fileName: string | undefined) {
+  const cleanFile = String(fileName || "").trim();
+  if (!cleanFile || cleanFile === NO_FILE_OPTION) return "";
+
+  const cleanFolder = String(folderValue || DATA_ROOT_OPTION).trim();
+  if (!cleanFolder || cleanFolder === DATA_ROOT_OPTION) {
+    return `data/${cleanFile}`;
+  }
+
+  return `data/${cleanFolder}/${cleanFile}`;
+}
+
+function parseDataMediaPath(mediaPath: string | undefined) {
+  const raw = String(mediaPath || "").trim().replace(/\\/g, "/");
+  if (!raw.startsWith("data/")) return null;
+  const relative = raw.slice("data/".length);
+  const parts = relative.split("/").filter(Boolean);
+  if (parts.length === 0) return null;
+  const fileName = parts[parts.length - 1] || "";
+  const folder = parts.length > 1 ? parts.slice(0, -1).join("/") : DATA_ROOT_OPTION;
+  if (!fileName) return null;
+  return { folder, fileName };
+}
+
+type EmbedButtonAction = {
+  label: string;
+  style: "primary" | "secondary" | "success" | "danger";
+  functionName: string;
+};
+
+type EmbedSelectAction = {
+  label: string;
+  value: string;
+  description: string;
+  functionName: string;
+};
+
+function parseConfigArray<T>(raw: string | undefined, fallback: T[]): T[] {
+  try {
+    const parsed = JSON.parse(String(raw || "[]"));
+    return Array.isArray(parsed) ? parsed as T[] : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export default function DiscordBotManager() {
   const [section, setSection] = useState<SectionKey>("overview");
   const [status, setStatus] = useState<BotStatus | null>(null);
@@ -476,10 +535,15 @@ export default function DiscordBotManager() {
   const [modules, setModules] = useState<BotModule[]>([]);
   const [modulesBusy, setModulesBusy] = useState(false);
   const [flows, setFlows] = useState<BuilderFlowMeta[]>([]);
+  const [dataMediaFolders, setDataMediaFolders] = useState<string[]>([]);
+  const [authorIconFiles, setAuthorIconFiles] = useState<string[]>([]);
+  const [footerIconFiles, setFooterIconFiles] = useState<string[]>([]);
+  const [thumbnailFiles, setThumbnailFiles] = useState<string[]>([]);
+  const [imageFiles, setImageFiles] = useState<string[]>([]);
 
-  const [flowName, setFlowName] = useState("welcome_flow");
+  const [flowName, setFlowName] = useState("");
   const [builderMode, setBuilderMode] = useState<BuilderMode>("visual");
-  const [builderTargetPath, setBuilderTargetPath] = useState("cogs/generated/welcome_flow.py");
+  const [builderTargetPath, setBuilderTargetPath] = useState("");
   const [builderSource, setBuilderSource] = useState("");
   const [builderSourceBusy, setBuilderSourceBusy] = useState(false);
   const [compileResult, setCompileResult] = useState("");
@@ -487,7 +551,7 @@ export default function DiscordBotManager() {
 
   const [nodes, setNodes] = useState<BuilderNode[]>(getDefaultBuilderNodes());
   const [edges, setEdges] = useState<BuilderEdge[]>(getDefaultBuilderEdges());
-  const [selectedNodeId, setSelectedNodeId] = useState("n1");
+  const [selectedNodeId, setSelectedNodeId] = useState("");
   const [selectedTemplateType, setSelectedTemplateType] = useState<BuilderNodeType | null>(null);
   const [flowPickerValue, setFlowPickerValue] = useState("");
   const [modulePickerValue, setModulePickerValue] = useState("");
@@ -553,6 +617,14 @@ export default function DiscordBotManager() {
     return Array.from(new Set([...moduleNames, ...flowNames, ...localFunctions])).filter(Boolean).sort((a, b) => a.localeCompare(b));
   }, [modules, flows, nodes]);
 
+  const localFunctionOptions = useMemo(() => {
+    return nodes
+      .filter((n) => n.type === "function_define")
+      .map((n) => String(n.payload || "").trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+  }, [nodes]);
+
   const templateGroups = useMemo(() => {
     return NODE_TEMPLATES.reduce<Record<string, typeof NODE_TEMPLATES>>((acc, template) => {
       if (!acc[template.category]) acc[template.category] = [];
@@ -560,6 +632,25 @@ export default function DiscordBotManager() {
       return acc;
     }, {});
   }, []);
+
+  const sendEmbedButtons = useMemo<EmbedButtonAction[]>(() => {
+    if (selectedNode?.type !== "send_embed") return [];
+    return parseConfigArray<EmbedButtonAction>(selectedNode.config?.buttonsJson, []).map((item, index) => ({
+      label: String(item?.label || `Pulsante ${index + 1}`),
+      style: item?.style === "success" || item?.style === "danger" || item?.style === "secondary" ? item.style : "primary",
+      functionName: String(item?.functionName || ""),
+    }));
+  }, [selectedNode?.id, selectedNode?.type, selectedNode?.config?.buttonsJson]);
+
+  const sendEmbedSelectOptions = useMemo<EmbedSelectAction[]>(() => {
+    if (selectedNode?.type !== "send_embed") return [];
+    return parseConfigArray<EmbedSelectAction>(selectedNode.config?.selectOptionsJson, []).map((item, index) => ({
+      label: String(item?.label || `Opzione ${index + 1}`),
+      value: String(item?.value || `option_${index + 1}`),
+      description: String(item?.description || ""),
+      functionName: String(item?.functionName || ""),
+    }));
+  }, [selectedNode?.id, selectedNode?.type, selectedNode?.config?.selectOptionsJson]);
 
   const syncEditorScroll = () => {
     const input = editorInputRef.current;
@@ -703,6 +794,65 @@ export default function DiscordBotManager() {
       setCommandError(err.message || "Errore caricamento cartella");
     } finally {
       setFileBusy(false);
+    }
+  };
+
+  const loadDataMediaFolders = async () => {
+    try {
+      const res = await fetch(`${API_ENDPOINTS.botFiles}?path=${encodeURIComponent("data")}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Errore caricamento cartelle data");
+
+      const folders = Array.isArray(data?.entries)
+        ? data.entries
+            .filter((entry: FileEntry) => entry.type === "dir")
+            .map((entry: FileEntry) => String(entry.name || "").trim())
+            .filter(Boolean)
+            .sort((a: string, b: string) => a.localeCompare(b))
+        : [];
+
+      setDataMediaFolders(folders);
+    } catch {
+      setDataMediaFolders([]);
+    }
+  };
+
+  const loadDataMediaFiles = async (folderValue: string | undefined, target: "authorIcon" | "footerIcon" | "thumbnail" | "image") => {
+    const folder = String(folderValue || DATA_ROOT_OPTION);
+    const relativePath = folder && folder !== DATA_ROOT_OPTION ? `data/${folder}` : "data";
+
+    try {
+      const res = await fetch(`${API_ENDPOINTS.botFiles}?path=${encodeURIComponent(relativePath)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Errore caricamento immagini data");
+
+      const files = Array.isArray(data?.entries)
+        ? data.entries
+            .filter((entry: FileEntry) => entry.type === "file" && IMAGE_FILE_PATTERN.test(String(entry.name || "")))
+            .map((entry: FileEntry) => String(entry.name || "").trim())
+            .filter(Boolean)
+            .sort((a: string, b: string) => a.localeCompare(b))
+        : [];
+
+      if (target === "authorIcon") {
+        setAuthorIconFiles(files);
+      } else if (target === "footerIcon") {
+        setFooterIconFiles(files);
+      } else if (target === "thumbnail") {
+        setThumbnailFiles(files);
+      } else {
+        setImageFiles(files);
+      }
+    } catch {
+      if (target === "authorIcon") {
+        setAuthorIconFiles([]);
+      } else if (target === "footerIcon") {
+        setFooterIconFiles([]);
+      } else if (target === "thumbnail") {
+        setThumbnailFiles([]);
+      } else {
+        setImageFiles([]);
+      }
     }
   };
 
@@ -853,10 +1003,10 @@ export default function DiscordBotManager() {
   };
 
   const resetBuilder = () => {
-    const nextName = "welcome_flow";
+    const nextName = "";
     const nextNodes = getDefaultBuilderNodes();
     setFlowName(nextName);
-    setBuilderTargetPath(getDefaultBuilderTargetPath(nextName));
+    setBuilderTargetPath("");
     setBuilderSource("");
     setBuilderMode("visual");
     setNodes(nextNodes);
@@ -869,8 +1019,8 @@ export default function DiscordBotManager() {
   };
 
   const loadFlowIntoBuilder = async (flow: BuilderFlowMeta) => {
-    const nextNodes = Array.isArray(flow.nodes) && flow.nodes.length ? flow.nodes : getDefaultBuilderNodes();
-    const nextEdges = Array.isArray(flow.edges) ? flow.edges : getDefaultBuilderEdges();
+    const nextNodes = Array.isArray(flow.nodes) ? flow.nodes : [];
+    const nextEdges = Array.isArray(flow.edges) ? flow.edges : [];
     const targetPath = flow.compiledFile || getDefaultBuilderTargetPath(flow.name);
 
     setFlowName(flow.name);
@@ -1128,6 +1278,130 @@ export default function DiscordBotManager() {
     );
   };
 
+  const updateSendEmbedFolder = (target: "authorIcon" | "footerIcon" | "thumbnail" | "image", folderValue: string) => {
+    if (!selectedNode || selectedNode.type !== "send_embed") return;
+    const folderKey = target === "authorIcon"
+      ? "authorIconFolder"
+      : target === "footerIcon"
+        ? "footerIconFolder"
+        : target === "thumbnail"
+          ? "thumbnailFolder"
+          : "imageFolder";
+    const fileKey = target === "authorIcon"
+      ? "authorIconFile"
+      : target === "footerIcon"
+        ? "footerIconFile"
+        : target === "thumbnail"
+          ? "thumbnailFile"
+          : "imageFile";
+    const urlKey = target === "authorIcon"
+      ? "authorIconUrl"
+      : target === "footerIcon"
+        ? "footerIconUrl"
+        : target === "thumbnail"
+          ? "thumbnailUrl"
+          : "imageUrl";
+
+    const nextFolder = folderValue || DATA_ROOT_OPTION;
+    updateSelectedNodeConfig(folderKey, nextFolder);
+    updateSelectedNodeConfig(fileKey, "");
+    updateSelectedNodeConfig(urlKey, "");
+  };
+
+  const updateSendEmbedFile = (target: "authorIcon" | "footerIcon" | "thumbnail" | "image", fileValue: string) => {
+    if (!selectedNode || selectedNode.type !== "send_embed") return;
+    const folderKey = target === "authorIcon"
+      ? "authorIconFolder"
+      : target === "footerIcon"
+        ? "footerIconFolder"
+        : target === "thumbnail"
+          ? "thumbnailFolder"
+          : "imageFolder";
+    const fileKey = target === "authorIcon"
+      ? "authorIconFile"
+      : target === "footerIcon"
+        ? "footerIconFile"
+        : target === "thumbnail"
+          ? "thumbnailFile"
+          : "imageFile";
+    const urlKey = target === "authorIcon"
+      ? "authorIconUrl"
+      : target === "footerIcon"
+        ? "footerIconUrl"
+        : target === "thumbnail"
+          ? "thumbnailUrl"
+          : "imageUrl";
+
+    const normalizedFile = fileValue === NO_FILE_OPTION ? "" : fileValue;
+    const folderValue = String(selectedNode.config?.[folderKey] || DATA_ROOT_OPTION);
+    const mediaPath = buildDataMediaPath(folderValue, normalizedFile);
+
+    updateSelectedNodeConfig(fileKey, normalizedFile);
+    updateSelectedNodeConfig(urlKey, mediaPath);
+  };
+
+  const updateSendEmbedComponentMode = (value: "none" | "buttons" | "select") => {
+    if (!selectedNode || selectedNode.type !== "send_embed") return;
+    updateSelectedNodeConfig("componentMode", value);
+
+    if (value === "buttons" && sendEmbedButtons.length === 0) {
+      updateSelectedNodeConfig("buttonsJson", JSON.stringify([{ label: "Pulsante 1", style: "primary", functionName: "" }]));
+    }
+
+    if (value === "select" && sendEmbedSelectOptions.length === 0) {
+      updateSelectedNodeConfig("selectOptionsJson", JSON.stringify([{ label: "Opzione 1", value: "option_1", description: "", functionName: "" }]));
+      updateSelectedNodeConfig("selectMinValues", "1");
+      updateSelectedNodeConfig("selectMaxValues", "1");
+    }
+  };
+
+  const updateSendEmbedButtonsCount = (countValue: string) => {
+    if (!selectedNode || selectedNode.type !== "send_embed") return;
+    const count = Math.max(1, Math.min(5, Number.parseInt(countValue, 10) || 1));
+    const next = [...sendEmbedButtons];
+
+    while (next.length < count) {
+      next.push({ label: `Pulsante ${next.length + 1}`, style: "primary", functionName: "" });
+    }
+
+    updateSelectedNodeConfig("buttonsJson", JSON.stringify(next.slice(0, count)));
+  };
+
+  const updateSendEmbedButtonItem = (index: number, patch: Partial<EmbedButtonAction>) => {
+    if (!selectedNode || selectedNode.type !== "send_embed") return;
+    const next = [...sendEmbedButtons];
+    if (!next[index]) return;
+    next[index] = { ...next[index], ...patch };
+    updateSelectedNodeConfig("buttonsJson", JSON.stringify(next));
+  };
+
+  const updateSendEmbedSelectCount = (countValue: string) => {
+    if (!selectedNode || selectedNode.type !== "send_embed") return;
+    const count = Math.max(1, Math.min(8, Number.parseInt(countValue, 10) || 1));
+    const next = [...sendEmbedSelectOptions];
+
+    while (next.length < count) {
+      const index = next.length + 1;
+      next.push({ label: `Opzione ${index}`, value: `option_${index}`, description: "", functionName: "" });
+    }
+
+    const trimmed = next.slice(0, count);
+    updateSelectedNodeConfig("selectOptionsJson", JSON.stringify(trimmed));
+
+    const maxValues = Math.max(1, Math.min(count, Number.parseInt(String(selectedNode.config?.selectMaxValues || "1"), 10) || 1));
+    const minValues = Math.max(1, Math.min(maxValues, Number.parseInt(String(selectedNode.config?.selectMinValues || "1"), 10) || 1));
+    updateSelectedNodeConfig("selectMaxValues", String(maxValues));
+    updateSelectedNodeConfig("selectMinValues", String(minValues));
+  };
+
+  const updateSendEmbedSelectItem = (index: number, patch: Partial<EmbedSelectAction>) => {
+    if (!selectedNode || selectedNode.type !== "send_embed") return;
+    const next = [...sendEmbedSelectOptions];
+    if (!next[index]) return;
+    next[index] = { ...next[index], ...patch };
+    updateSelectedNodeConfig("selectOptionsJson", JSON.stringify(next));
+  };
+
   const updateSelectedNodePrefix = (value: "/" | "!") => {
     if (!selectedNode) return;
     setNodes((prev) => prev.map((n) => (n.id === selectedNode.id ? { ...n, prefix: value } : n)));
@@ -1252,6 +1526,55 @@ export default function DiscordBotManager() {
       void loadModules();
     }
   }, [section]);
+
+  useEffect(() => {
+    if (section !== "builder" || selectedNode?.type !== "send_embed") return;
+    void loadDataMediaFolders();
+  }, [section, selectedNode?.id]);
+
+  useEffect(() => {
+    if (section !== "builder" || selectedNode?.type !== "send_embed") return;
+    void loadDataMediaFiles(String(selectedNode.config?.authorIconFolder || DATA_ROOT_OPTION), "authorIcon");
+    void loadDataMediaFiles(String(selectedNode.config?.footerIconFolder || DATA_ROOT_OPTION), "footerIcon");
+    void loadDataMediaFiles(String(selectedNode.config?.thumbnailFolder || DATA_ROOT_OPTION), "thumbnail");
+    void loadDataMediaFiles(String(selectedNode.config?.imageFolder || DATA_ROOT_OPTION), "image");
+  }, [section, selectedNode?.id, selectedNode?.config?.authorIconFolder, selectedNode?.config?.footerIconFolder, selectedNode?.config?.thumbnailFolder, selectedNode?.config?.imageFolder]);
+
+  useEffect(() => {
+    if (selectedNode?.type !== "send_embed") return;
+
+    if (!selectedNode.config?.authorIconFile && selectedNode.config?.authorIconUrl) {
+      const parsed = parseDataMediaPath(String(selectedNode.config.authorIconUrl));
+      if (parsed) {
+        updateSelectedNodeConfig("authorIconFolder", parsed.folder);
+        updateSelectedNodeConfig("authorIconFile", parsed.fileName);
+      }
+    }
+
+    if (!selectedNode.config?.footerIconFile && selectedNode.config?.footerIconUrl) {
+      const parsed = parseDataMediaPath(String(selectedNode.config.footerIconUrl));
+      if (parsed) {
+        updateSelectedNodeConfig("footerIconFolder", parsed.folder);
+        updateSelectedNodeConfig("footerIconFile", parsed.fileName);
+      }
+    }
+
+    if (!selectedNode.config?.thumbnailFile && selectedNode.config?.thumbnailUrl) {
+      const parsed = parseDataMediaPath(String(selectedNode.config.thumbnailUrl));
+      if (parsed) {
+        updateSelectedNodeConfig("thumbnailFolder", parsed.folder);
+        updateSelectedNodeConfig("thumbnailFile", parsed.fileName);
+      }
+    }
+
+    if (!selectedNode.config?.imageFile && selectedNode.config?.imageUrl) {
+      const parsed = parseDataMediaPath(String(selectedNode.config.imageUrl));
+      if (parsed) {
+        updateSelectedNodeConfig("imageFolder", parsed.folder);
+        updateSelectedNodeConfig("imageFile", parsed.fileName);
+      }
+    }
+  }, [selectedNode?.id, selectedNode?.type, selectedNode?.config?.authorIconFile, selectedNode?.config?.authorIconUrl, selectedNode?.config?.footerIconFile, selectedNode?.config?.footerIconUrl, selectedNode?.config?.thumbnailFile, selectedNode?.config?.thumbnailUrl, selectedNode?.config?.imageFile, selectedNode?.config?.imageUrl]);
 
   return (
     <div className="discord-panel-shell">
@@ -2071,15 +2394,6 @@ export default function DiscordBotManager() {
                           placeholder="#f59e0b"
                         />
                       </div>
-                      <div>
-                        <label className="text-xs text-foreground/65 mb-1 block">URL titolo</label>
-                        <input
-                          className="w-full px-2 py-2 rounded border border-border bg-background text-xs"
-                          value={selectedNode.config?.url || ""}
-                          onChange={(e) => updateSelectedNodeConfig("url", e.target.value)}
-                          placeholder="https://..."
-                        />
-                      </div>
                     </div>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <div>
@@ -2091,25 +2405,24 @@ export default function DiscordBotManager() {
                           placeholder="Nome autore"
                         />
                       </div>
-                      <div>
-                        <label className="text-xs text-foreground/65 mb-1 block">URL autore</label>
-                        <input
-                          className="w-full px-2 py-2 rounded border border-border bg-background text-xs"
-                          value={selectedNode.config?.authorUrl || ""}
-                          onChange={(e) => updateSelectedNodeConfig("authorUrl", e.target.value)}
-                          placeholder="https://..."
-                        />
-                      </div>
                     </div>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <div>
-                        <label className="text-xs text-foreground/65 mb-1 block">Icona autore</label>
-                        <input
-                          className="w-full px-2 py-2 rounded border border-border bg-background text-xs"
-                          value={selectedNode.config?.authorIconUrl || ""}
-                          onChange={(e) => updateSelectedNodeConfig("authorIconUrl", e.target.value)}
-                          placeholder="https://..."
-                        />
+                        <label className="text-xs text-foreground/65 mb-1 block">Cartella icona autore (data)</label>
+                        <Select
+                          value={selectedNode.config?.authorIconFolder || DATA_ROOT_OPTION}
+                          onValueChange={(value) => updateSendEmbedFolder("authorIcon", value)}
+                        >
+                          <SelectTrigger className="h-9 px-3 py-2 text-xs rounded-lg border border-border bg-card text-foreground">
+                            <SelectValue placeholder="Seleziona cartella" />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-lg border border-border bg-card text-foreground custom-scrollbar">
+                            <SelectItem value={DATA_ROOT_OPTION}>data (root)</SelectItem>
+                            {dataMediaFolders.map((folder) => (
+                              <SelectItem key={`author-icon-folder-${folder}`} value={folder}>{folder}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div>
                         <label className="text-xs text-foreground/65 mb-1 block">Footer</label>
@@ -2123,32 +2436,331 @@ export default function DiscordBotManager() {
                     </div>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <div>
-                        <label className="text-xs text-foreground/65 mb-1 block">Icona footer</label>
-                        <input
-                          className="w-full px-2 py-2 rounded border border-border bg-background text-xs"
-                          value={selectedNode.config?.footerIconUrl || ""}
-                          onChange={(e) => updateSelectedNodeConfig("footerIconUrl", e.target.value)}
-                          placeholder="https://..."
-                        />
+                        <label className="text-xs text-foreground/65 mb-1 block">File icona autore</label>
+                        <Select
+                          value={selectedNode.config?.authorIconFile || NO_FILE_OPTION}
+                          onValueChange={(value) => updateSendEmbedFile("authorIcon", value)}
+                        >
+                          <SelectTrigger className="h-9 px-3 py-2 text-xs rounded-lg border border-border bg-card text-foreground">
+                            <SelectValue placeholder="Seleziona immagine" />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-lg border border-border bg-card text-foreground custom-scrollbar">
+                            <SelectItem value={NO_FILE_OPTION}>Nessuna</SelectItem>
+                            {authorIconFiles.map((fileName) => (
+                              <SelectItem key={`author-icon-file-${fileName}`} value={fileName}>{fileName}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div>
-                        <label className="text-xs text-foreground/65 mb-1 block">Thumbnail</label>
-                        <input
-                          className="w-full px-2 py-2 rounded border border-border bg-background text-xs"
-                          value={selectedNode.config?.thumbnailUrl || ""}
-                          onChange={(e) => updateSelectedNodeConfig("thumbnailUrl", e.target.value)}
-                          placeholder="https://..."
-                        />
+                        <label className="text-xs text-foreground/65 mb-1 block">Cartella icona footer (data)</label>
+                        <Select
+                          value={selectedNode.config?.footerIconFolder || DATA_ROOT_OPTION}
+                          onValueChange={(value) => updateSendEmbedFolder("footerIcon", value)}
+                        >
+                          <SelectTrigger className="h-9 px-3 py-2 text-xs rounded-lg border border-border bg-card text-foreground">
+                            <SelectValue placeholder="Seleziona cartella" />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-lg border border-border bg-card text-foreground custom-scrollbar">
+                            <SelectItem value={DATA_ROOT_OPTION}>data (root)</SelectItem>
+                            {dataMediaFolders.map((folder) => (
+                              <SelectItem key={`footer-icon-folder-${folder}`} value={folder}>{folder}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
-                    <div>
-                      <label className="text-xs text-foreground/65 mb-1 block">Immagine grande</label>
-                      <input
-                        className="w-full px-2 py-2 rounded border border-border bg-background text-xs"
-                        value={selectedNode.config?.imageUrl || ""}
-                        onChange={(e) => updateSelectedNodeConfig("imageUrl", e.target.value)}
-                        placeholder="https://..."
-                      />
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div>
+                        <label className="text-xs text-foreground/65 mb-1 block">File icona footer</label>
+                        <Select
+                          value={selectedNode.config?.footerIconFile || NO_FILE_OPTION}
+                          onValueChange={(value) => updateSendEmbedFile("footerIcon", value)}
+                        >
+                          <SelectTrigger className="h-9 px-3 py-2 text-xs rounded-lg border border-border bg-card text-foreground">
+                            <SelectValue placeholder="Seleziona immagine" />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-lg border border-border bg-card text-foreground custom-scrollbar">
+                            <SelectItem value={NO_FILE_OPTION}>Nessuna</SelectItem>
+                            {footerIconFiles.map((fileName) => (
+                              <SelectItem key={`footer-icon-file-${fileName}`} value={fileName}>{fileName}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-foreground/65 mb-1 block">Cartella thumbnail (data)</label>
+                        <Select
+                          value={selectedNode.config?.thumbnailFolder || DATA_ROOT_OPTION}
+                          onValueChange={(value) => updateSendEmbedFolder("thumbnail", value)}
+                        >
+                          <SelectTrigger className="h-9 px-3 py-2 text-xs rounded-lg border border-border bg-card text-foreground">
+                            <SelectValue placeholder="Seleziona cartella" />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-lg border border-border bg-card text-foreground custom-scrollbar">
+                            <SelectItem value={DATA_ROOT_OPTION}>data (root)</SelectItem>
+                            {dataMediaFolders.map((folder) => (
+                              <SelectItem key={`thumb-folder-${folder}`} value={folder}>{folder}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <div>
+                        <label className="text-xs text-foreground/65 mb-1 block">File thumbnail</label>
+                        <Select
+                          value={selectedNode.config?.thumbnailFile || NO_FILE_OPTION}
+                          onValueChange={(value) => updateSendEmbedFile("thumbnail", value)}
+                        >
+                          <SelectTrigger className="h-9 px-3 py-2 text-xs rounded-lg border border-border bg-card text-foreground">
+                            <SelectValue placeholder="Seleziona immagine" />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-lg border border-border bg-card text-foreground custom-scrollbar">
+                            <SelectItem value={NO_FILE_OPTION}>Nessuna</SelectItem>
+                            {thumbnailFiles.map((fileName) => (
+                              <SelectItem key={`thumb-file-${fileName}`} value={fileName}>{fileName}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-foreground/65 mb-1 block">Cartella immagine (data)</label>
+                        <Select
+                          value={selectedNode.config?.imageFolder || DATA_ROOT_OPTION}
+                          onValueChange={(value) => updateSendEmbedFolder("image", value)}
+                        >
+                          <SelectTrigger className="h-9 px-3 py-2 text-xs rounded-lg border border-border bg-card text-foreground">
+                            <SelectValue placeholder="Seleziona cartella" />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-lg border border-border bg-card text-foreground custom-scrollbar">
+                            <SelectItem value={DATA_ROOT_OPTION}>data (root)</SelectItem>
+                            {dataMediaFolders.map((folder) => (
+                              <SelectItem key={`image-folder-${folder}`} value={folder}>{folder}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-foreground/65 mb-1 block">File immagine grande</label>
+                        <Select
+                          value={selectedNode.config?.imageFile || NO_FILE_OPTION}
+                          onValueChange={(value) => updateSendEmbedFile("image", value)}
+                        >
+                          <SelectTrigger className="h-9 px-3 py-2 text-xs rounded-lg border border-border bg-card text-foreground">
+                            <SelectValue placeholder="Seleziona immagine" />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-lg border border-border bg-card text-foreground custom-scrollbar">
+                            <SelectItem value={NO_FILE_OPTION}>Nessuna</SelectItem>
+                            {imageFiles.map((fileName) => (
+                              <SelectItem key={`image-file-${fileName}`} value={fileName}>{fileName}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-foreground/60">
+                      Carica prima le immagini nella cartella data/ del bot (anche in sottocartelle), poi selezionale dai menu.
+                    </div>
+                    <div className="rounded border border-border/70 bg-background/40 p-2 space-y-2">
+                      <label className="text-xs text-foreground/65 mb-1 block">Componenti interattivi</label>
+                      <Select
+                        value={selectedNode.config?.componentMode || "none"}
+                        onValueChange={(value) => updateSendEmbedComponentMode(value as "none" | "buttons" | "select")}
+                      >
+                        <SelectTrigger className="h-9 px-3 py-2 text-xs rounded-lg border border-border bg-card text-foreground">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="rounded-lg border border-border bg-card text-foreground custom-scrollbar">
+                          <SelectItem value="none">Nessuno</SelectItem>
+                          <SelectItem value="buttons">Pulsanti</SelectItem>
+                          <SelectItem value="select">Select Menu</SelectItem>
+                        </SelectContent>
+                      </Select>
+
+                      {(selectedNode.config?.componentMode || "none") === "buttons" && (
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <div>
+                              <label className="text-xs text-foreground/65 mb-1 block">Numero pulsanti</label>
+                              <Select
+                                value={String(Math.max(1, sendEmbedButtons.length || 1))}
+                                onValueChange={updateSendEmbedButtonsCount}
+                              >
+                                <SelectTrigger className="h-9 px-3 py-2 text-xs rounded-lg border border-border bg-card text-foreground">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent className="rounded-lg border border-border bg-card text-foreground custom-scrollbar">
+                                  {[1, 2, 3, 4, 5].map((count) => (
+                                    <SelectItem key={`btn-count-${count}`} value={String(count)}>{count}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+
+                          {sendEmbedButtons.map((button, index) => (
+                            <div key={`send-embed-button-${index}`} className="rounded border border-border/60 p-2 space-y-2">
+                              <div className="text-[11px] text-foreground/60">Pulsante {index + 1}</div>
+                              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                <input
+                                  className="w-full px-2 py-2 rounded border border-border bg-background text-xs"
+                                  value={button.label}
+                                  onChange={(e) => updateSendEmbedButtonItem(index, { label: e.target.value })}
+                                  placeholder="Etichetta"
+                                />
+                                <Select
+                                  value={button.style}
+                                  onValueChange={(value) => updateSendEmbedButtonItem(index, { style: value as EmbedButtonAction["style"] })}
+                                >
+                                  <SelectTrigger className="h-9 px-3 py-2 text-xs rounded-lg border border-border bg-card text-foreground">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent className="rounded-lg border border-border bg-card text-foreground custom-scrollbar">
+                                    <SelectItem value="primary">Primary</SelectItem>
+                                    <SelectItem value="secondary">Secondary</SelectItem>
+                                    <SelectItem value="success">Success</SelectItem>
+                                    <SelectItem value="danger">Danger</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <Select
+                                  value={button.functionName || NO_FILE_OPTION}
+                                  onValueChange={(value) => updateSendEmbedButtonItem(index, { functionName: value === NO_FILE_OPTION ? "" : value })}
+                                >
+                                  <SelectTrigger className="h-9 px-3 py-2 text-xs rounded-lg border border-border bg-card text-foreground">
+                                    <SelectValue placeholder="Funzione azione" />
+                                  </SelectTrigger>
+                                  <SelectContent className="rounded-lg border border-border bg-card text-foreground custom-scrollbar">
+                                    <SelectItem value={NO_FILE_OPTION}>Nessuna funzione</SelectItem>
+                                    {localFunctionOptions.map((name) => (
+                                      <SelectItem key={`btn-action-${index}-${name}`} value={name}>{name}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {(selectedNode.config?.componentMode || "none") === "select" && (
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <div>
+                              <label className="text-xs text-foreground/65 mb-1 block">Placeholder select</label>
+                              <input
+                                className="w-full px-2 py-2 rounded border border-border bg-background text-xs"
+                                value={selectedNode.config?.selectPlaceholder || "Scegli un'opzione"}
+                                onChange={(e) => updateSelectedNodeConfig("selectPlaceholder", e.target.value)}
+                                placeholder="Scegli un'opzione"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-foreground/65 mb-1 block">Numero opzioni</label>
+                              <Select
+                                value={String(Math.max(1, sendEmbedSelectOptions.length || 1))}
+                                onValueChange={updateSendEmbedSelectCount}
+                              >
+                                <SelectTrigger className="h-9 px-3 py-2 text-xs rounded-lg border border-border bg-card text-foreground">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent className="rounded-lg border border-border bg-card text-foreground custom-scrollbar">
+                                  {[1, 2, 3, 4, 5, 6, 7, 8].map((count) => (
+                                    <SelectItem key={`select-count-${count}`} value={String(count)}>{count}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <div>
+                              <label className="text-xs text-foreground/65 mb-1 block">Min selezioni</label>
+                              <Select
+                                value={String(Math.max(1, Number.parseInt(String(selectedNode.config?.selectMinValues || "1"), 10) || 1))}
+                                onValueChange={(value) => {
+                                  const minValue = Math.max(1, Number.parseInt(value, 10) || 1);
+                                  const maxCurrent = Math.max(minValue, Number.parseInt(String(selectedNode.config?.selectMaxValues || "1"), 10) || 1);
+                                  updateSelectedNodeConfig("selectMinValues", String(minValue));
+                                  updateSelectedNodeConfig("selectMaxValues", String(maxCurrent));
+                                }}
+                              >
+                                <SelectTrigger className="h-9 px-3 py-2 text-xs rounded-lg border border-border bg-card text-foreground">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent className="rounded-lg border border-border bg-card text-foreground custom-scrollbar">
+                                  {Array.from({ length: Math.max(1, sendEmbedSelectOptions.length || 1) }, (_, i) => i + 1).map((count) => (
+                                    <SelectItem key={`select-min-${count}`} value={String(count)}>{count}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <label className="text-xs text-foreground/65 mb-1 block">Max selezioni</label>
+                              <Select
+                                value={String(Math.max(1, Number.parseInt(String(selectedNode.config?.selectMaxValues || "1"), 10) || 1))}
+                                onValueChange={(value) => {
+                                  const maxValue = Math.max(1, Number.parseInt(value, 10) || 1);
+                                  const minCurrent = Math.min(maxValue, Number.parseInt(String(selectedNode.config?.selectMinValues || "1"), 10) || 1);
+                                  updateSelectedNodeConfig("selectMaxValues", String(maxValue));
+                                  updateSelectedNodeConfig("selectMinValues", String(Math.max(1, minCurrent)));
+                                }}
+                              >
+                                <SelectTrigger className="h-9 px-3 py-2 text-xs rounded-lg border border-border bg-card text-foreground">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent className="rounded-lg border border-border bg-card text-foreground custom-scrollbar">
+                                  {Array.from({ length: Math.max(1, sendEmbedSelectOptions.length || 1) }, (_, i) => i + 1).map((count) => (
+                                    <SelectItem key={`select-max-${count}`} value={String(count)}>{count}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+
+                          {sendEmbedSelectOptions.map((option, index) => (
+                            <div key={`send-embed-select-option-${index}`} className="rounded border border-border/60 p-2 space-y-2">
+                              <div className="text-[11px] text-foreground/60">Opzione {index + 1}</div>
+                              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                <input
+                                  className="w-full px-2 py-2 rounded border border-border bg-background text-xs"
+                                  value={option.label}
+                                  onChange={(e) => updateSendEmbedSelectItem(index, { label: e.target.value })}
+                                  placeholder="Label"
+                                />
+                                <input
+                                  className="w-full px-2 py-2 rounded border border-border bg-background text-xs"
+                                  value={option.value}
+                                  onChange={(e) => updateSendEmbedSelectItem(index, { value: e.target.value })}
+                                  placeholder="value_univoco"
+                                />
+                              </div>
+                              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                <input
+                                  className="w-full px-2 py-2 rounded border border-border bg-background text-xs"
+                                  value={option.description}
+                                  onChange={(e) => updateSendEmbedSelectItem(index, { description: e.target.value })}
+                                  placeholder="Descrizione opzionale"
+                                />
+                                <Select
+                                  value={option.functionName || NO_FILE_OPTION}
+                                  onValueChange={(value) => updateSendEmbedSelectItem(index, { functionName: value === NO_FILE_OPTION ? "" : value })}
+                                >
+                                  <SelectTrigger className="h-9 px-3 py-2 text-xs rounded-lg border border-border bg-card text-foreground">
+                                    <SelectValue placeholder="Funzione azione" />
+                                  </SelectTrigger>
+                                  <SelectContent className="rounded-lg border border-border bg-card text-foreground custom-scrollbar">
+                                    <SelectItem value={NO_FILE_OPTION}>Nessuna funzione</SelectItem>
+                                    {localFunctionOptions.map((name) => (
+                                      <SelectItem key={`select-action-${index}-${name}`} value={name}>{name}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <div>
                       <label className="text-xs text-foreground/65 mb-1 block">Campi embed in JSON</label>
