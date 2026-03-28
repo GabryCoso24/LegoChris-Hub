@@ -17,6 +17,7 @@ export const API_ENDPOINTS = {
   botFile: `${API_URL}/api/bot/file`,
   botFileRename: `${API_URL}/api/bot/file/rename`,
   botTerminalExec: `${API_URL}/api/bot/terminal/exec`,
+  botTerminalSession: `${API_URL}/api/bot/terminal/session`,
   botModules: `${API_URL}/api/bot/modules`,
   botBuilderFlows: `${API_URL}/api/bot/builder/flows`,
   botBuilderDeleteFlow: `${API_URL}/api/bot/builder/flows`,

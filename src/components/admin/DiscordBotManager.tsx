@@ -10,7 +10,6 @@ import {
   RefreshCcw,
   Save,
   Square,
-  Terminal,
   Trash2,
   Workflow,
   Settings,
@@ -29,6 +28,14 @@ type BotStatus = {
   pid: number | null;
   startedAt: number | null;
   uptimeMs: number;
+  cpuPercent?: number | null;
+  memoryBytes?: number | null;
+  nodeMemoryBytes?: number | null;
+  systemTotalMemoryBytes?: number | null;
+  systemFreeMemoryBytes?: number | null;
+  loadAvg1?: number;
+  loadAvg5?: number;
+  loadAvg15?: number;
   rootPath: string;
   entryScript: string;
   pythonCommand?: string;
@@ -114,8 +121,6 @@ type SectionKey = "overview" | "files" | "terminal" | "modules" | "builder";
 type BuilderMode = "visual" | "source";
 
 type EditorFont = "JetBrains Mono" | "Fira Code" | "Consolas";
-
-type TerminalFont = "JetBrains Mono" | "Fira Code" | "Cascadia Code";
 
 type AnsiStyle = {
   color?: string;
@@ -210,7 +215,7 @@ const NODE_TEMPLATES: NodeTemplate[] = [
 const SECTIONS: Array<{ key: SectionKey; label: string }> = [
   { key: "overview", label: "Overview" },
   { key: "files", label: "Files" },
-  { key: "terminal", label: "Terminal" },
+  { key: "terminal", label: "Risorse" },
   { key: "modules", label: "Modules" },
   { key: "builder", label: "Editor" },
 ];
@@ -408,6 +413,37 @@ function highlightPythonLine(line: string) {
   return parts;
 }
 
+function renderAnsiText(text: string, keyPrefix: string) {
+  const segments = parseAnsiToSegments(text || "");
+  if (segments.length === 0) {
+    return text;
+  }
+
+  return segments.map((segment, index) => (
+    <span key={`${keyPrefix}-${index}`} style={segment.style}>
+      {segment.text}
+    </span>
+  ));
+}
+
+function formatBytes(bytes: number | null | undefined) {
+  if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes < 0) return "N/D";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let index = 0;
+  while (value >= 1024 && index < units.length - 1) {
+    value /= 1024;
+    index += 1;
+  }
+  const precision = value >= 100 || index === 0 ? 0 : value >= 10 ? 1 : 2;
+  return `${value.toFixed(precision)} ${units[index]}`;
+}
+
+function clampPercent(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, value));
+}
+
 export default function DiscordBotManager() {
   const [section, setSection] = useState<SectionKey>("overview");
   const [status, setStatus] = useState<BotStatus | null>(null);
@@ -434,12 +470,8 @@ export default function DiscordBotManager() {
   const [editorFontSize, setEditorFontSize] = useState(14);
   const [editorZoom, setEditorZoom] = useState(1);
 
-  const [command, setCommand] = useState("python --version");
-  const [commandOutput, setCommandOutput] = useState("");
   const [commandError, setCommandError] = useState("");
-  const [commandBusy, setCommandBusy] = useState(false);
-  const [terminalFont, setTerminalFont] = useState<TerminalFont>("Cascadia Code");
-  const [terminalFontSize, setTerminalFontSize] = useState(13);
+  const [statusUpdatedAt, setStatusUpdatedAt] = useState<number | null>(null);
 
   const [modules, setModules] = useState<BotModule[]>([]);
   const [modulesBusy, setModulesBusy] = useState(false);
@@ -481,7 +513,21 @@ export default function DiscordBotManager() {
     return status.running ? "Online" : "Offline";
   }, [status]);
 
-  const ansiSegments = useMemo(() => parseAnsiToSegments(commandOutput || ""), [commandOutput]);
+  const botCpuPercent = useMemo(() => clampPercent(status?.cpuPercent), [status]);
+
+  const systemMemoryPercent = useMemo(() => {
+    const total = Number(status?.systemTotalMemoryBytes || 0);
+    const free = Number(status?.systemFreeMemoryBytes || 0);
+    if (total <= 0) return 0;
+    return clampPercent(((total - free) / total) * 100);
+  }, [status]);
+
+  const botMemoryPercent = useMemo(() => {
+    const botMem = Number(status?.memoryBytes || 0);
+    const total = Number(status?.systemTotalMemoryBytes || 0);
+    if (botMem <= 0 || total <= 0) return 0;
+    return clampPercent((botMem / total) * 100);
+  }, [status]);
 
   const editorLines = useMemo(() => fileContent.split("\n"), [fileContent]);
   const builderSourceLines = useMemo(() => builderSource.split("\n"), [builderSource]);
@@ -604,7 +650,9 @@ export default function DiscordBotManager() {
         const statusData = await statusRes.json().catch(() => ({}));
         throw new Error(statusData?.error || `Status ${statusRes.status}`);
       }
-      setStatus(await statusRes.json());
+      const latestStatus = await statusRes.json();
+      setStatus(latestStatus);
+      setStatusUpdatedAt(Date.now());
 
       if (logsRes.ok) {
         setLogs(await logsRes.json());
@@ -734,27 +782,6 @@ export default function DiscordBotManager() {
     if (!pendingDeletePath) return;
     await deletePath(pendingDeletePath);
     setPendingDeletePath(null);
-  };
-
-  const executeTerminalCommand = async () => {
-    if (!command.trim()) return;
-    setCommandBusy(true);
-    setCommandError("");
-    try {
-      const res = await fetch(API_ENDPOINTS.botTerminalExec, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ command, cwd: currentDir }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Errore esecuzione comando");
-      setCommandOutput([data.stdout, data.stderr].filter(Boolean).join("\n") || "(nessun output)");
-      await refreshStatus();
-    } catch (err: any) {
-      setCommandError(err.message || "Errore esecuzione comando");
-    } finally {
-      setCommandBusy(false);
-    }
   };
 
   const loadModules = async () => {
@@ -1234,7 +1261,7 @@ export default function DiscordBotManager() {
         </div>
         <div>
           <h2 className="text-2xl font-semibold">Discord Bot Control</h2>
-          <p className="text-sm text-foreground/60">PM2 logs reali, editor Python singolo, terminale tematizzato e builder blueprint-like</p>
+          <p className="text-sm text-foreground/60">PM2 logs reali, editor Python singolo, monitor risorse live e builder blueprint-like</p>
         </div>
       </div>
 
@@ -1345,8 +1372,10 @@ export default function DiscordBotManager() {
                 <div className="text-foreground/50">Nessun log disponibile</div>
               ) : (
                 logs.map((line, i) => (
-                  <div key={`${line.ts}-${i}`}>
-                    [{new Date(line.ts).toLocaleTimeString("it-IT")}] {line.level.toUpperCase()} {line.message}
+                  <div key={`${line.ts}-${i}`} className="whitespace-pre-wrap break-words">
+                    <span className="text-foreground/60">[{new Date(line.ts).toLocaleTimeString("it-IT")}] </span>
+                    <span className="font-semibold">{line.level.toUpperCase()} </span>
+                    {renderAnsiText(line.message, `${line.ts}-${i}`)}
                   </div>
                 ))
               )}
@@ -1490,59 +1519,67 @@ export default function DiscordBotManager() {
       {section === "terminal" && (
         <div className="space-y-4">
           <div className="discord-surface p-4 rounded-lg border border-border bg-background/50">
-            <div className="flex items-center gap-2 mb-3 text-sm font-medium"><Terminal className="w-4 h-4" />Mini Terminal (cwd: {currentDir})</div>
-            <div className="flex gap-2 mb-3">
-              <input
-                className="flex-1 px-3 py-2 rounded border border-border bg-background font-mono text-sm"
-                value={command}
-                onChange={(e) => setCommand(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && executeTerminalCommand()}
-                placeholder="Scrivi comando shell..."
-              />
-              <button className="px-4 py-2 rounded bg-primary text-primary-foreground disabled:opacity-50" disabled={commandBusy} onClick={executeTerminalCommand}>Esegui</button>
+            <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+              <div className="flex items-center gap-2 text-sm font-medium"><Settings className="w-4 h-4" />Monitor Risorse Bot</div>
+              <div className="text-xs text-foreground/70">
+                Ultimo aggiornamento: {statusUpdatedAt ? new Date(statusUpdatedAt).toLocaleTimeString("it-IT") : "-"}
+              </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <label className="text-xs text-foreground/70">Terminal Font</label>
-              <Select value={terminalFont} onValueChange={(value) => setTerminalFont(value as TerminalFont)}>
-                <SelectTrigger className="h-9 px-3 py-1.5 text-xs rounded-lg border border-border bg-card text-foreground w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="rounded-lg border border-border bg-card text-foreground custom-scrollbar">
-                  <SelectItem value="Cascadia Code">Cascadia Code</SelectItem>
-                  <SelectItem value="JetBrains Mono">JetBrains Mono</SelectItem>
-                  <SelectItem value="Fira Code">Fira Code</SelectItem>
-                </SelectContent>
-              </Select>
-              <label className="text-xs text-foreground/70">Size</label>
-              <input
-                type="number"
-                className="w-16 px-2 py-1.5 text-xs rounded border border-border bg-background"
-                min={11}
-                max={22}
-                value={terminalFontSize}
-                onChange={(e) => setTerminalFontSize(Math.min(22, Math.max(11, Number(e.target.value) || 13)))}
-              />
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <button
+                className="px-3 py-2 rounded bg-primary text-primary-foreground text-xs"
+                onClick={() => void refreshStatus()}
+              >
+                <span className="inline-flex items-center gap-1"><RefreshCcw className="w-3.5 h-3.5" /> Aggiorna Ora</span>
+              </button>
+              <div className="text-xs text-foreground/60">Aggiornamento automatico ogni 15s</div>
             </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-lg border border-border bg-background/60 p-3">
+                <div className="text-xs text-foreground/60 mb-1">CPU bot</div>
+                <div className="text-xl font-semibold">{botCpuPercent.toFixed(1)}%</div>
+                <div className="h-2 rounded bg-muted mt-2 overflow-hidden">
+                  <div className="h-full bg-primary" style={{ width: `${botCpuPercent}%` }} />
+                </div>
+              </div>
+              <div className="rounded-lg border border-border bg-background/60 p-3">
+                <div className="text-xs text-foreground/60 mb-1">RAM bot</div>
+                <div className="text-xl font-semibold">{formatBytes(status?.memoryBytes ?? null)}</div>
+                <div className="text-xs text-foreground/60 mt-1">{botMemoryPercent.toFixed(2)}% della RAM sistema</div>
+                <div className="h-2 rounded bg-muted mt-2 overflow-hidden">
+                  <div className="h-full bg-primary" style={{ width: `${botMemoryPercent}%` }} />
+                </div>
+              </div>
+              <div className="rounded-lg border border-border bg-background/60 p-3">
+                <div className="text-xs text-foreground/60 mb-1">Stato processo</div>
+                <div className={`text-xl font-semibold ${status?.running ? "text-green-500" : "text-destructive"}`}>{statusText}</div>
+                <div className="text-xs text-foreground/60 mt-1">PID: {status?.pid ?? "-"}</div>
+                <div className="text-xs text-foreground/60">Uptime: {Math.max(0, Math.floor((status?.uptimeMs || 0) / 1000))}s</div>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2 mt-3">
+              <div className="rounded-lg border border-border bg-background/60 p-3">
+                <div className="text-xs text-foreground/60 mb-1">Memoria sistema</div>
+                <div className="text-sm text-foreground/80">
+                  Usata: {formatBytes((status?.systemTotalMemoryBytes || 0) - (status?.systemFreeMemoryBytes || 0))} / {formatBytes(status?.systemTotalMemoryBytes || null)}
+                </div>
+                <div className="text-xs text-foreground/60 mt-1">Libera: {formatBytes(status?.systemFreeMemoryBytes || null)}</div>
+                <div className="h-2 rounded bg-muted mt-2 overflow-hidden">
+                  <div className="h-full bg-primary" style={{ width: `${systemMemoryPercent}%` }} />
+                </div>
+              </div>
+              <div className="rounded-lg border border-border bg-background/60 p-3">
+                <div className="text-xs text-foreground/60 mb-1">Load Average</div>
+                <div className="text-sm text-foreground/80">1m: {(status?.loadAvg1 ?? 0).toFixed(2)}</div>
+                <div className="text-sm text-foreground/80">5m: {(status?.loadAvg5 ?? 0).toFixed(2)}</div>
+                <div className="text-sm text-foreground/80">15m: {(status?.loadAvg15 ?? 0).toFixed(2)}</div>
+              </div>
+            </div>
+
             {commandError && <div className="mt-2 text-xs text-destructive">{commandError}</div>}
-          </div>
-
-          <div
-            className="discord-surface h-[450px] overflow-auto rounded-lg p-3 whitespace-pre-wrap custom-scrollbar border border-border"
-            style={{
-              fontFamily: terminalFont,
-              fontSize: `${terminalFontSize}px`,
-              background: "linear-gradient(180deg, #20150f 0%, #140f0b 55%, #0f0b09 100%)",
-              color: "#ffd7af",
-            }}
-          >
-            {ansiSegments.length === 0 ? (
-              <span className="text-[#9f8c76]">Output comando...</span>
-            ) : (
-              ansiSegments.map((segment, i) => (
-                <span key={`ansi-${i}`} style={segment.style}>{segment.text}</span>
-              ))
-            )}
           </div>
         </div>
       )}

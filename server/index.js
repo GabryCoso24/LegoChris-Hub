@@ -12,6 +12,7 @@ import Stripe from "stripe";
 import crypto from "crypto";
 import os from "os";
 import { spawn } from "child_process";
+import pty from "node-pty";
 import { welcomeEmail, passwordResetEmail, orderReceiptEmail, newsletterEmail, orderStatusUpdateEmail, adminNewOrderEmail } from "./emailTemplates.js";
 import { custom } from "zod";
 
@@ -233,9 +234,165 @@ const defaultBotPythonCommand = process.env.BOT_PYTHON_COMMAND || "python";
 const defaultPm2ProcessName = process.env.BOT_PM2_PROCESS_NAME || "legochris-discord-bot";
 const maxTerminalOutputBytes = Number(process.env.BOT_TERMINAL_OUTPUT_LIMIT || 200000);
 const commandTimeoutMs = Number(process.env.BOT_COMMAND_TIMEOUT_MS || 60000);
+const terminalSessionIdleMs = Number(process.env.BOT_TERMINAL_SESSION_IDLE_MS || 20 * 60 * 1000);
+const terminalSessionBufferLimit = Number(process.env.BOT_TERMINAL_SESSION_BUFFER_LIMIT || 400000);
+const terminalMaxSessions = Number(process.env.BOT_TERMINAL_MAX_SESSIONS || 3);
 
 const botLogBuffer = [];
 const botLogSubscribers = new Set();
+const botTerminalSessions = new Map();
+
+function getTerminalShellCommand() {
+  if (process.platform === "win32") {
+    return {
+      command: process.env.BOT_TERMINAL_SHELL || "powershell.exe",
+      args: process.env.BOT_TERMINAL_SHELL_ARGS
+        ? process.env.BOT_TERMINAL_SHELL_ARGS.split(" ").filter(Boolean)
+        : ["-NoLogo"],
+    };
+  }
+
+  const shell = process.env.BOT_TERMINAL_SHELL || process.env.SHELL || "/bin/bash";
+  return {
+    command: shell,
+    args: process.env.BOT_TERMINAL_SHELL_ARGS
+      ? process.env.BOT_TERMINAL_SHELL_ARGS.split(" ").filter(Boolean)
+      : ["-l"],
+  };
+}
+
+function closeTerminalSession(sessionId, reason = "closed") {
+  const session = botTerminalSessions.get(sessionId);
+  if (!session) return;
+
+  session.closed = true;
+  session.closeReason = reason;
+
+  try {
+    session.ptyProcess.kill();
+  } catch {
+    // noop
+  }
+
+  for (const res of session.subscribers) {
+    try {
+      res.write(`data: ${JSON.stringify({ type: "exit", reason, code: session.exitCode ?? null })}\n\n`);
+      res.end();
+    } catch {
+      // noop
+    }
+  }
+
+  session.subscribers.clear();
+  botTerminalSessions.delete(sessionId);
+}
+
+function writeTerminalEvent(session, event) {
+  for (const res of session.subscribers) {
+    try {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    } catch {
+      // noop
+    }
+  }
+}
+
+function appendTerminalChunk(session, chunk) {
+  if (!chunk) return;
+
+  session.lastActivity = Date.now();
+  session.buffer += chunk;
+  if (session.buffer.length > terminalSessionBufferLimit) {
+    session.buffer = session.buffer.slice(-terminalSessionBufferLimit);
+  }
+
+  writeTerminalEvent(session, { type: "data", chunk });
+}
+
+function createTerminalSession(config, cwdRelative = ".", cols = 120, rows = 32) {
+  if (botTerminalSessions.size >= terminalMaxSessions) {
+    throw new Error(`Limite sessioni terminal raggiunto (${terminalMaxSessions}). Chiudi una sessione esistente.`);
+  }
+
+  const cwd = resolveSandboxPath(config, cwdRelative);
+  const safeCols = Math.max(40, Math.min(300, Number(cols) || 120));
+  const safeRows = Math.max(12, Math.min(120, Number(rows) || 32));
+  const shell = getTerminalShellCommand();
+  const shellLabel = [shell.command, ...shell.args].join(" ").trim();
+
+  console.log("[PTY] Spawning shell:", shellLabel, "in", cwd, "cols:", safeCols, "rows:", safeRows);
+
+  let ptyProcess;
+  try {
+    ptyProcess = pty.spawn(shell.command, shell.args, {
+      name: "xterm-256color",
+      cols: safeCols,
+      rows: safeRows,
+      cwd,
+      env: {
+        ...process.env,
+        TERM: "xterm-256color",
+        COLORTERM: "truecolor",
+        FORCE_COLOR: "1",
+      },
+    });
+    console.log("[PTY] Successfully spawned PTY process");
+  } catch (err) {
+    console.error("[PTY] Error spawning PTY:", err.message);
+    throw new Error(`Failed to spawn terminal: ${err.message}`);
+  }
+
+  const id = crypto.randomUUID();
+  const session = {
+    id,
+    cwd,
+    cwdRelative: relFromBotRoot(config, cwd),
+    ptyProcess,
+    subscribers: new Set(),
+    buffer: "",
+    createdAt: Date.now(),
+    lastActivity: Date.now(),
+    closed: false,
+    closeReason: null,
+    exitCode: null,
+    shell: shellLabel,
+  };
+
+  ptyProcess.onData((data) => {
+    console.log("[PTY] onData event, chunk size:", data.length);
+    appendTerminalChunk(session, data);
+  });
+
+  ptyProcess.onExit(({ exitCode }) => {
+    console.log("[PTY] onExit event, code:", exitCode);
+    session.closed = true;
+    session.exitCode = exitCode;
+    writeTerminalEvent(session, { type: "exit", code: exitCode ?? null, reason: "process-exit" });
+  });
+
+  ptyProcess.onError?.((err) => {
+    console.error("[PTY] onError event:", err.message);
+    session.closed = true;
+    writeTerminalEvent(session, { type: "error", message: err.message });
+  });
+
+  botTerminalSessions.set(id, session);
+  console.log("[PTY] Session created:", id);
+  return session;
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, session] of botTerminalSessions.entries()) {
+    if (session.closed && now - session.lastActivity > 30_000) {
+      closeTerminalSession(id, "closed");
+      continue;
+    }
+    if (!session.closed && now - session.lastActivity > terminalSessionIdleMs) {
+      closeTerminalSession(id, "idle-timeout");
+    }
+  }
+}, 30_000);
 
 function pushBotLog(level, message) {
   const entry = {
@@ -370,11 +527,25 @@ async function getBotStatus() {
   const pm2Status = proc?.pm2_env?.status || "stopped";
   const running = pm2Status === "online";
 
+  const processMemoryBytes = Number(proc?.monit?.memory);
+  const processCpuPercent = Number(proc?.monit?.cpu);
+  const systemTotalMemoryBytes = os.totalmem();
+  const systemFreeMemoryBytes = os.freemem();
+  const [loadAvg1 = 0, loadAvg5 = 0, loadAvg15 = 0] = os.loadavg();
+
   return {
     running,
     pid: proc?.pid || proc?.pid_id || null,
     startedAt: proc?.pm2_env?.pm_uptime || null,
     uptimeMs: proc?.pm2_env?.pm_uptime ? Date.now() - proc.pm2_env.pm_uptime : 0,
+    cpuPercent: Number.isFinite(processCpuPercent) ? processCpuPercent : null,
+    memoryBytes: Number.isFinite(processMemoryBytes) ? processMemoryBytes : null,
+    nodeMemoryBytes: process.memoryUsage().rss,
+    systemTotalMemoryBytes,
+    systemFreeMemoryBytes,
+    loadAvg1,
+    loadAvg5,
+    loadAvg15,
     rootPath: config.rootPath,
     entryScript: config.entryScript,
     pythonCommand: config.pythonCommand,
@@ -3087,6 +3258,131 @@ app.post("/api/bot/terminal/exec", async (req, res) => {
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
+});
+
+app.post("/api/bot/terminal/session", async (req, res) => {
+  try {
+    await db.read();
+    const config = getBotConfig();
+    const cwdRelative = String(req.body?.cwd || ".");
+    const cols = Number(req.body?.cols || 120);
+    const rows = Number(req.body?.rows || 32);
+    
+    console.log("[API] POST /api/bot/terminal/session: creating new session, cwd:", cwdRelative, "cols:", cols, "rows:", rows);
+    
+    const session = createTerminalSession(config, cwdRelative, cols, rows);
+
+    pushBotLog("info", `Terminal session opened: ${session.id}`);
+    console.log("[API] POST /api/bot/terminal/session: session created successfully, id:", session.id);
+    
+    res.json({
+      id: session.id,
+      cwd: session.cwdRelative,
+      shell: session.shell,
+      cols,
+      rows,
+    });
+  } catch (err) {
+    console.error("[API] POST /api/bot/terminal/session error:", err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get("/api/bot/terminal/session/:id/stream", (req, res) => {
+  const sessionId = String(req.params.id || "");
+  console.log("[API] GET /api/bot/terminal/session/:id/stream, sessionId:", sessionId);
+  
+  const session = botTerminalSessions.get(sessionId);
+  if (!session) {
+    console.error("[API] Session not found:", sessionId);
+    return res.status(404).json({ error: "Terminal session not found" });
+  }
+
+  console.log("[API] Session found, setting up SSE headers");
+  
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.flushHeaders?.();
+
+  session.subscribers.add(res);
+  session.lastActivity = Date.now();
+
+  console.log("[API] Client connected, subscribers count:", session.subscribers.size, "buffer size:", session.buffer.length);
+
+  if (session.buffer) {
+    console.log("[API] Sending initial snapshot, size:", session.buffer.length);
+    res.write(`data: ${JSON.stringify({ type: "snapshot", chunk: session.buffer })}\n\n`);
+  }
+  if (session.closed) {
+    console.log("[API] Session is already closed, sending exit event");
+    res.write(`data: ${JSON.stringify({ type: "exit", code: session.exitCode ?? null, reason: session.closeReason || "closed" })}\n\n`);
+  }
+
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(`event: ping\ndata: ${Date.now()}\n\n`);
+    } catch {
+      // noop
+    }
+  }, 15000);
+
+  req.on("close", () => {
+    console.log("[API] SSE client disconnected");
+    clearInterval(heartbeat);
+    session.subscribers.delete(res);
+    session.lastActivity = Date.now();
+  });
+});
+
+app.post("/api/bot/terminal/session/:id/input", (req, res) => {
+  try {
+    const session = botTerminalSessions.get(String(req.params.id || ""));
+    if (!session) {
+      return res.status(404).json({ error: "Terminal session not found" });
+    }
+    if (session.closed) {
+      return res.status(409).json({ error: "Terminal session is already closed" });
+    }
+
+    const data = String(req.body?.data || "");
+    if (!data) {
+      return res.status(400).json({ error: "Input data is required" });
+    }
+
+    session.ptyProcess.write(data);
+    session.lastActivity = Date.now();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post("/api/bot/terminal/session/:id/resize", (req, res) => {
+  try {
+    const session = botTerminalSessions.get(String(req.params.id || ""));
+    if (!session) {
+      return res.status(404).json({ error: "Terminal session not found" });
+    }
+
+    const cols = Math.max(40, Math.min(300, Number(req.body?.cols) || 120));
+    const rows = Math.max(12, Math.min(120, Number(req.body?.rows) || 32));
+    session.ptyProcess.resize(cols, rows);
+    session.lastActivity = Date.now();
+    res.json({ success: true, cols, rows });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete("/api/bot/terminal/session/:id", (req, res) => {
+  const id = String(req.params.id || "");
+  if (!botTerminalSessions.has(id)) {
+    return res.status(404).json({ error: "Terminal session not found" });
+  }
+  closeTerminalSession(id, "manual-close");
+  res.json({ success: true });
 });
 
 app.get("/api/bot/files", async (req, res) => {
