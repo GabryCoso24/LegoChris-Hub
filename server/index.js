@@ -228,10 +228,10 @@ db.data.bot_config ||= {};
 await db.write();
 
 // Discord Bot Control Panel - foundation
-const defaultBotRootPath = path.resolve(process.env.BOT_ROOT_PATH || path.join(__dirname, "../discord-bot"));
-const defaultBotEntryScript = process.env.BOT_ENTRY_SCRIPT || "index.js";
+const defaultBotRootPath = path.resolve(process.env.BOT_ROOT_PATH || "/home/gabrycoso/LegoChrisBot_V2");
+const defaultBotEntryScript = process.env.BOT_ENTRY_SCRIPT || "src/index.js";
 const defaultBotRuntimeCommand = process.env.BOT_RUNTIME_COMMAND || process.env.BOT_NODE_COMMAND || "node";
-const defaultPm2ProcessName = process.env.BOT_PM2_PROCESS_NAME || "legochris-discord-bot";
+const defaultPm2ProcessName = process.env.BOT_PM2_PROCESS_NAME || "lc-bot";
 const maxTerminalOutputBytes = Number(process.env.BOT_TERMINAL_OUTPUT_LIMIT || 200000);
 const commandTimeoutMs = Number(process.env.BOT_COMMAND_TIMEOUT_MS || 60000);
 const terminalSessionIdleMs = Number(process.env.BOT_TERMINAL_SESSION_IDLE_MS || 20 * 60 * 1000);
@@ -700,30 +700,67 @@ async function listDirectory(config, relativePath = ".") {
 }
 
 async function scanCogs(config) {
-  const cogsDir = resolveSandboxPath(config, "cogs");
-  if (!fs.existsSync(cogsDir)) {
-    return [];
-  }
-  const modules = [];
+  const modules = new Set();
 
-  async function walk(relativeDir = "") {
-    const absDir = path.join(cogsDir, relativeDir);
-    const files = await fs.promises.readdir(absDir, { withFileTypes: true });
-    for (const entry of files) {
-      if (entry.name === "__pycache__") continue;
-      if (entry.isDirectory()) {
-        await walk(path.join(relativeDir, entry.name));
-        continue;
-      }
-      if (!entry.isFile() || !entry.name.endsWith(".py") || entry.name === "__init__.py") continue;
-      const noExt = entry.name.replace(/\.py$/, "");
-      const rel = path.join(relativeDir, noExt).replace(/\\/g, ".");
-      modules.push(rel || noExt);
+  const configuredScanRoots = String(process.env.BOT_MODULE_DIRS || "src/moderation,src/utilities,cogs")
+    .split(",")
+    .map((value) => value.trim().replace(/\\/g, "/"))
+    .filter(Boolean);
+
+  async function walkModuleDir(scanRoot) {
+    let absRoot;
+    try {
+      absRoot = resolveSandboxPath(config, scanRoot);
+    } catch {
+      return;
     }
+    if (!fs.existsSync(absRoot)) return;
+
+    const isLegacyCogs = scanRoot === "cogs";
+    const rootSegments = scanRoot.split("/").filter(Boolean);
+    const logicalPrefix = isLegacyCogs ? "" : (rootSegments[rootSegments.length - 1] || "");
+
+    async function walk(relativeDir = "") {
+      const absDir = path.join(absRoot, relativeDir);
+      const files = await fs.promises.readdir(absDir, { withFileTypes: true });
+      for (const entry of files) {
+        if (entry.name === "__pycache__") continue;
+        if (entry.isDirectory()) {
+          await walk(path.join(relativeDir, entry.name));
+          continue;
+        }
+        if (!entry.isFile()) continue;
+
+        if (isLegacyCogs) {
+          if (!entry.name.endsWith(".py") || entry.name === "__init__.py") continue;
+          const noExt = entry.name.replace(/\.py$/, "");
+          const rel = path.join(relativeDir, noExt).replace(/\\/g, ".");
+          if (rel || noExt) {
+            modules.add(rel || noExt);
+          }
+          continue;
+        }
+
+        if (!/\.(js|mjs|cjs)$/i.test(entry.name)) continue;
+
+        const noExt = entry.name.replace(/\.(js|mjs|cjs)$/i, "");
+        const relParts = path.join(relativeDir, noExt).replace(/\\/g, "/").split("/").filter(Boolean);
+        const normalizedParts = relParts.filter((part, index) => !(part === "index" && index === relParts.length - 1));
+        const moduleParts = [logicalPrefix, ...normalizedParts].filter(Boolean);
+        if (moduleParts.length > 0) {
+          modules.add(moduleParts.join("."));
+        }
+      }
+    }
+
+    await walk("");
   }
 
-  await walk("");
-  return modules.sort((a, b) => a.localeCompare(b));
+  for (const scanRoot of configuredScanRoots) {
+    await walkModuleDir(scanRoot);
+  }
+
+  return Array.from(modules).sort((a, b) => a.localeCompare(b));
 }
 
 function sanitizeCogName(value, fallback = "generated_command") {
@@ -735,15 +772,19 @@ function sanitizeCogName(value, fallback = "generated_command") {
 }
 
 function normalizeCogRelativePath(relativePath, fallbackName = "generated_command") {
-  const fallbackFile = `cogs/generated/${sanitizeCogName(fallbackName)}.py`;
+  const fallbackFile = `src/utilities/generated/${sanitizeCogName(fallbackName)}.js`;
   const raw = String(relativePath || "").trim().replace(/\\/g, "/");
   let normalized = raw || fallbackFile;
   normalized = normalized.replace(/^\/+/, "");
-  if (!normalized.startsWith("cogs/")) {
-    normalized = `cogs/${normalized}`;
+  if (!normalized.startsWith("cogs/") && !normalized.startsWith("src/")) {
+    normalized = `src/${normalized}`;
   }
-  if (!normalized.endsWith(".py")) {
-    normalized = `${normalized}.py`;
+  if (normalized.startsWith("cogs/")) {
+    if (!normalized.endsWith(".py")) {
+      normalized = `${normalized}.py`;
+    }
+  } else if (!/\.(js|mjs|cjs)$/i.test(normalized)) {
+    normalized = `${normalized}.js`;
   }
   normalized = normalized.replace(/\/+/g, "/");
   if (normalized.endsWith("/__init__.py") || normalized === "cogs/__init__.py") {
@@ -754,14 +795,24 @@ function normalizeCogRelativePath(relativePath, fallbackName = "generated_comman
 
 function relativeCogPathToModuleName(relativePath) {
   const normalized = String(relativePath || "").replace(/\\/g, "/");
-  if (!normalized.startsWith("cogs/") || !normalized.endsWith(".py")) {
+  if (normalized.startsWith("cogs/") && normalized.endsWith(".py")) {
+    const withoutPrefix = normalized.slice("cogs/".length, -".py".length);
+    if (!withoutPrefix || withoutPrefix.endsWith("/__init__")) {
+      return null;
+    }
+    return withoutPrefix.split("/").filter(Boolean).join(".");
+  }
+  if (!normalized.startsWith("src/")) {
     return null;
   }
-  const withoutPrefix = normalized.slice("cogs/".length, -".py".length);
-  if (!withoutPrefix || withoutPrefix.endsWith("/__init__")) {
-    return null;
-  }
-  return withoutPrefix.split("/").filter(Boolean).join(".");
+
+  const withoutPrefix = normalized.slice("src/".length).replace(/\.(js|mjs|cjs)$/i, "");
+  const parts = withoutPrefix.split("/").filter(Boolean);
+  if (parts.length < 2) return null;
+
+  const [group, ...rest] = parts;
+  const normalizedRest = rest.filter((part, index) => !(part === "index" && index === rest.length - 1));
+  return [group, ...normalizedRest].filter(Boolean).join(".");
 }
 
 function generateNodeBody(node) {

@@ -255,11 +255,26 @@ function getDefaultBuilderEdges(): BuilderEdge[] {
 }
 
 function getDefaultBuilderTargetPath(name: string) {
-  return `cogs/generated/${sanitizeBuilderName(name)}.js`;
+  return `src/utilities/generated/${sanitizeBuilderName(name)}.js`;
 }
 
-function moduleToCogPath(moduleName: string) {
-  return `cogs/${String(moduleName || "").replace(/\./g, "/")}.js`;
+function moduleToScriptPath(moduleName: string) {
+  const parts = String(moduleName || "")
+    .split(".")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    return "src/index.js";
+  }
+
+  const [group, ...rest] = parts;
+  if (group === "moderation" || group === "utilities") {
+    const moduleParts = rest.length ? rest : ["index"];
+    return `src/${group}/${moduleParts.join("/")}.js`;
+  }
+
+  return `src/${parts.join("/")}.js`;
 }
 
 function getParentDirectoryFromPath(relativePath: string) {
@@ -518,10 +533,10 @@ export default function DiscordBotManager() {
   const [statusError, setStatusError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [config, setConfig] = useState<BotConfig>({
-    rootPath: "",
-    entryScript: "index.js",
+    rootPath: "/home/gabrycoso/LegoChrisBot_V2",
+    entryScript: "src/index.js",
     runtimeCommand: "node",
-    pm2ProcessName: "legochris-discord-bot",
+    pm2ProcessName: "lc-bot",
   });
   const [configBusy, setConfigBusy] = useState(false);
 
@@ -1053,7 +1068,7 @@ export default function DiscordBotManager() {
   };
 
   const loadModuleIntoBuilder = async (moduleName: string) => {
-    const targetPath = moduleToCogPath(moduleName);
+    const targetPath = moduleToScriptPath(moduleName);
     setBuilderSourceBusy(true);
     try {
       const res = await fetch(`${API_ENDPOINTS.botFile}?path=${encodeURIComponent(targetPath)}`);
@@ -1736,7 +1751,7 @@ export default function DiscordBotManager() {
             <div className="flex gap-2 mb-3">
               <input
                 className="flex-1 px-3 py-2 rounded border border-border bg-background text-sm"
-                placeholder="Nuovo path (es: cogs/new.js)"
+                placeholder="Nuovo path (es: src/moderation/new-command.js)"
                 value={newPathInput}
                 onChange={(e) => setNewPathInput(e.target.value)}
               />
@@ -1954,7 +1969,7 @@ export default function DiscordBotManager() {
                 </span>
               </div>
             ))}
-            {modules.length === 0 && <div className="px-4 py-5 text-sm text-foreground/60">Nessun modulo trovato in cogs/</div>}
+            {modules.length === 0 && <div className="px-4 py-5 text-sm text-foreground/60">Nessun modulo trovato in src/moderation o src/utilities</div>}
           </div>
         </div>
       )}
@@ -2085,7 +2100,7 @@ export default function DiscordBotManager() {
                   className="px-3 py-2 rounded border border-border bg-background text-xs font-mono"
                   value={builderTargetPath}
                   onChange={(e) => setBuilderTargetPath(e.target.value)}
-                  placeholder="Target module path (es: cogs/moderation/welcome.js)"
+                  placeholder="Target module path (es: src/moderation/welcome.js)"
                 />
               </div>
 
