@@ -1919,13 +1919,13 @@ export default function DiscordBotManager() {
       {section === "modules" && (
         <div className="space-y-4">
           <div className="discord-surface p-4 rounded-lg border border-border bg-background/50 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm font-medium"><Cog className="w-4 h-4" />Moduli (cogs)</div>
-              <div className="flex items-center gap-2 text-sm font-medium"><Cog className="w-4 h-4" />Moduli bot</div>
-            <div className="text-xs text-foreground/60">Lista stato sola lettura</div>
-                      {modules.length === 0 && <div className="px-4 py-5 text-sm text-foreground/60">Nessun modulo trovato nel root del bot</div>}
-                      <div className="text-sm font-semibold mb-2">Builder Control</div>
-                          <label className="text-[11px] uppercase tracking-wide text-foreground/55 mb-1 block">Moduli esistenti</label>
-                              <SelectValue placeholder="Apri modulo nel builder..." />
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Cog className="w-4 h-4" />
+              Moduli bot
+            </div>
+            <div className="text-xs text-foreground/60">
+              {modulesBusy ? "Aggiornamento in corso..." : "Lista stato sola lettura"}
+            </div>
           </div>
 
           <div className="discord-surface rounded-lg border border-border bg-background/40 overflow-hidden">
