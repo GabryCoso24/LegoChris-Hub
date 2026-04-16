@@ -229,8 +229,8 @@ await db.write();
 
 // Discord Bot Control Panel - foundation
 const defaultBotRootPath = path.resolve(process.env.BOT_ROOT_PATH || path.join(__dirname, "../discord-bot"));
-const defaultBotEntryScript = process.env.BOT_ENTRY_SCRIPT || "bot.py";
-const defaultBotPythonCommand = process.env.BOT_PYTHON_COMMAND || "python";
+const defaultBotEntryScript = process.env.BOT_ENTRY_SCRIPT || "index.js";
+const defaultBotRuntimeCommand = process.env.BOT_RUNTIME_COMMAND || process.env.BOT_NODE_COMMAND || "node";
 const defaultPm2ProcessName = process.env.BOT_PM2_PROCESS_NAME || "legochris-discord-bot";
 const maxTerminalOutputBytes = Number(process.env.BOT_TERMINAL_OUTPUT_LIMIT || 200000);
 const commandTimeoutMs = Number(process.env.BOT_COMMAND_TIMEOUT_MS || 60000);
@@ -411,10 +411,12 @@ function pushBotLog(level, message) {
 
 function getBotConfig() {
   const saved = db.data?.bot_config || {};
+  const runtimeCommand = saved.runtimeCommand || saved.pythonCommand || defaultBotRuntimeCommand;
   return {
     rootPath: path.resolve(saved.rootPath || defaultBotRootPath),
     entryScript: saved.entryScript || defaultBotEntryScript,
-    pythonCommand: saved.pythonCommand || defaultBotPythonCommand,
+    runtimeCommand,
+    pythonCommand: runtimeCommand,
     pm2ProcessName: saved.pm2ProcessName || defaultPm2ProcessName,
   };
 }
@@ -548,7 +550,8 @@ async function getBotStatus() {
     loadAvg15,
     rootPath: config.rootPath,
     entryScript: config.entryScript,
-    pythonCommand: config.pythonCommand,
+    runtimeCommand: config.runtimeCommand,
+    pythonCommand: config.runtimeCommand,
     pm2ProcessName: config.pm2ProcessName,
     pm2Installed: info.pm2Available,
     pm2Status,
@@ -577,7 +580,7 @@ async function startBotProcess() {
     "--name",
     config.pm2ProcessName,
     "--interpreter",
-    config.pythonCommand,
+    config.runtimeCommand,
     "--cwd",
     config.rootPath,
   ];
@@ -3335,7 +3338,16 @@ app.put("/api/bot/config", async (req, res) => {
     const updated = {
       rootPath: payload.rootPath ? path.resolve(String(payload.rootPath)) : current.rootPath,
       entryScript: payload.entryScript ? String(payload.entryScript) : current.entryScript,
-      pythonCommand: payload.pythonCommand ? String(payload.pythonCommand) : current.pythonCommand,
+      runtimeCommand: payload.runtimeCommand
+        ? String(payload.runtimeCommand)
+        : payload.pythonCommand
+          ? String(payload.pythonCommand)
+          : current.runtimeCommand,
+      pythonCommand: payload.runtimeCommand
+        ? String(payload.runtimeCommand)
+        : payload.pythonCommand
+          ? String(payload.pythonCommand)
+          : current.runtimeCommand,
       pm2ProcessName: payload.pm2ProcessName ? String(payload.pm2ProcessName) : current.pm2ProcessName,
     };
 

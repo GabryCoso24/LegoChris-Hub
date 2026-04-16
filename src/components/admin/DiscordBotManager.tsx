@@ -38,6 +38,7 @@ type BotStatus = {
   loadAvg15?: number;
   rootPath: string;
   entryScript: string;
+  runtimeCommand?: string;
   pythonCommand?: string;
   pm2ProcessName?: string;
   pm2Installed?: boolean;
@@ -49,7 +50,7 @@ type BotStatus = {
 type BotConfig = {
   rootPath: string;
   entryScript: string;
-  pythonCommand: string;
+  runtimeCommand: string;
   pm2ProcessName: string;
 };
 
@@ -164,15 +165,19 @@ const ANSI_COLORS: Record<number, string> = {
   97: "#f8fafc",
 };
 
-const PYTHON_KEYWORDS = new Set([
+const JAVASCRIPT_KEYWORDS = new Set([
   "import",
   "from",
   "as",
-  "def",
+  "export",
+  "default",
+  "const",
+  "let",
+  "var",
+  "function",
   "class",
   "return",
   "if",
-  "elif",
   "else",
   "for",
   "while",
@@ -181,20 +186,23 @@ const PYTHON_KEYWORDS = new Set([
   "try",
   "except",
   "finally",
+  "switch",
+  "case",
+  "break",
   "await",
   "async",
-  "with",
   "in",
   "and",
   "or",
   "not",
-  "None",
-  "True",
-  "False",
-  "pass",
+  "null",
+  "true",
+  "false",
+  "this",
+  "new",
+  "throw",
+  "catch",
   "yield",
-  "match",
-  "case",
 ]);
 
 const NODE_TEMPLATES: NodeTemplate[] = [
@@ -247,11 +255,11 @@ function getDefaultBuilderEdges(): BuilderEdge[] {
 }
 
 function getDefaultBuilderTargetPath(name: string) {
-  return `cogs/generated/${sanitizeBuilderName(name)}.py`;
+  return `cogs/generated/${sanitizeBuilderName(name)}.js`;
 }
 
 function moduleToCogPath(moduleName: string) {
-  return `cogs/${String(moduleName || "").replace(/\./g, "/")}.py`;
+  return `cogs/${String(moduleName || "").replace(/\./g, "/")}.js`;
 }
 
 function getParentDirectoryFromPath(relativePath: string) {
@@ -390,7 +398,7 @@ function parseAnsiToSegments(input: string): AnsiSegment[] {
   return segments;
 }
 
-function highlightPythonLine(line: string) {
+function highlightJavaScriptLine(line: string) {
   const tokenRegex = /(#.*$|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b\d+(?:\.\d+)?\b|\b[A-Za-z_][A-Za-z0-9_]*\b)/g;
   const parts: Array<{ text: string; className: string }> = [];
   let cursor = 0;
@@ -409,7 +417,7 @@ function highlightPythonLine(line: string) {
       className = "discord-editor-token-string";
     } else if (/^\d/.test(value)) {
       className = "discord-editor-token-number";
-    } else if (PYTHON_KEYWORDS.has(value)) {
+    } else if (JAVASCRIPT_KEYWORDS.has(value)) {
       className = "discord-editor-token-keyword";
     } else if (/^[A-Z][A-Za-z0-9_]*$/.test(value)) {
       className = "discord-editor-token-type";
@@ -509,11 +517,10 @@ export default function DiscordBotManager() {
   const [logs, setLogs] = useState<BotLog[]>([]);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
-
   const [config, setConfig] = useState<BotConfig>({
     rootPath: "",
-    entryScript: "bot.py",
-    pythonCommand: "python",
+    entryScript: "index.js",
+    runtimeCommand: "node",
     pm2ProcessName: "legochris-discord-bot",
   });
   const [configBusy, setConfigBusy] = useState(false);
@@ -1584,7 +1591,7 @@ export default function DiscordBotManager() {
         </div>
         <div>
           <h2 className="text-2xl font-semibold">Discord Bot Control</h2>
-          <p className="text-sm text-foreground/60">PM2 logs reali, editor Python singolo, monitor risorse live e builder blueprint-like</p>
+            <p className="text-sm text-foreground/60">PM2 logs reali, editor JavaScript singolo, monitor risorse live e builder blueprint-like</p>
         </div>
       </div>
 
@@ -1625,14 +1632,16 @@ export default function DiscordBotManager() {
                 className="px-3 py-2 rounded border border-border bg-background text-sm"
                 value={config.entryScript}
                 onChange={(e) => setConfig((prev) => ({ ...prev, entryScript: e.target.value }))}
-                placeholder="Entry script (es: bot.py)"
+                  placeholder="Entry script (es: index.js)"
               />
               <input
                 className="px-3 py-2 rounded border border-border bg-background text-sm"
-                value={config.pythonCommand}
-                onChange={(e) => setConfig((prev) => ({ ...prev, pythonCommand: e.target.value }))}
-                placeholder="Python command"
+                  value={config.runtimeCommand}
+                  onChange={(e) => setConfig((prev) => ({ ...prev, runtimeCommand: e.target.value }))}
+                  placeholder="Runtime command (es: node)"
               />
+                            <span className="text-xs text-foreground/60">Le modifiche aggiornano root, entrypoint e processo PM2 in tempo reale.</span>
+                            <div className="flex items-center gap-2 text-sm font-medium"><FolderTree className="w-4 h-4" />{currentDir}</div>
               <input
                 className="px-3 py-2 rounded border border-border bg-background text-sm"
                 value={config.pm2ProcessName}
@@ -1727,7 +1736,7 @@ export default function DiscordBotManager() {
             <div className="flex gap-2 mb-3">
               <input
                 className="flex-1 px-3 py-2 rounded border border-border bg-background text-sm"
-                placeholder="Nuovo path (es: cogs/new.py)"
+                placeholder="Nuovo path (es: cogs/new.js)"
                 value={newPathInput}
                 onChange={(e) => setNewPathInput(e.target.value)}
               />
@@ -1808,7 +1817,7 @@ export default function DiscordBotManager() {
               >
                 {editorLines.map((line, index) => (
                   <div key={`hl-${index}`} className="whitespace-pre-wrap break-words">
-                    {highlightPythonLine(line).map((token, i) => (
+                    {highlightJavaScriptLine(line).map((token, i) => (
                       <span key={`tk-${index}-${i}`} className={token.className}>{token.text}</span>
                     ))}
                   </div>
@@ -1911,7 +1920,12 @@ export default function DiscordBotManager() {
         <div className="space-y-4">
           <div className="discord-surface p-4 rounded-lg border border-border bg-background/50 flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm font-medium"><Cog className="w-4 h-4" />Moduli (cogs)</div>
+              <div className="flex items-center gap-2 text-sm font-medium"><Cog className="w-4 h-4" />Moduli bot</div>
             <div className="text-xs text-foreground/60">Lista stato sola lettura</div>
+                      {modules.length === 0 && <div className="px-4 py-5 text-sm text-foreground/60">Nessun modulo trovato nel root del bot</div>}
+                      <div className="text-sm font-semibold mb-2">Builder Control</div>
+                          <label className="text-[11px] uppercase tracking-wide text-foreground/55 mb-1 block">Moduli esistenti</label>
+                              <SelectValue placeholder="Apri modulo nel builder..." />
           </div>
 
           <div className="discord-surface rounded-lg border border-border bg-background/40 overflow-hidden">
@@ -2071,7 +2085,7 @@ export default function DiscordBotManager() {
                   className="px-3 py-2 rounded border border-border bg-background text-xs font-mono"
                   value={builderTargetPath}
                   onChange={(e) => setBuilderTargetPath(e.target.value)}
-                  placeholder="Target cog path (es: cogs/moderation/welcome.py)"
+                  placeholder="Target module path (es: cogs/moderation/welcome.js)"
                 />
               </div>
 
@@ -2187,7 +2201,7 @@ export default function DiscordBotManager() {
                 >
                   {builderSourceLines.map((line, index) => (
                     <div key={`builder-hl-${index}`} className="whitespace-pre-wrap break-words">
-                      {highlightPythonLine(line).map((token, i) => (
+                      {highlightJavaScriptLine(line).map((token, i) => (
                         <span key={`builder-tk-${index}-${i}`} className={token.className}>{token.text}</span>
                       ))}
                     </div>
@@ -2225,9 +2239,9 @@ export default function DiscordBotManager() {
                 <div className="text-xs"><span className="text-foreground/60">Linee:</span> {builderSource.split("\n").length}</div>
                 <div className="text-xs"><span className="text-foreground/60">Caratteri:</span> {builderSource.length}</div>
                 <div className="p-2 rounded border border-border bg-background/60 text-xs text-foreground/70 space-y-2">
-                  <div>Questa modalita permette di modificare qualsiasi cog esistente direttamente dentro l'editor.</div>
-                  <div>Puoi aprire un cog dalla colonna sinistra, modificarlo qui e salvarlo sul path target.</div>
-                  <div>Se vuoi partire dai nodi visuali, usa "Genera Codice dai Nodi" e poi rifinisci il Python in questa vista.</div>
+                  <div>Questa modalita permette di modificare qualsiasi modulo esistente direttamente dentro l'editor.</div>
+                  <div>Puoi aprire un modulo dalla colonna sinistra, modificarlo qui e salvarlo sul path target.</div>
+                  <div>Se vuoi partire dai nodi visuali, usa "Genera Codice dai Nodi" e poi rifinisci il JavaScript in questa vista.</div>
                 </div>
               </>
             ) : !selectedNode && selectedTemplate ? (
