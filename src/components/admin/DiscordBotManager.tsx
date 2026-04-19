@@ -1969,7 +1969,7 @@ export default function DiscordBotManager() {
                 </span>
               </div>
             ))}
-            {modules.length === 0 && <div className="px-4 py-5 text-sm text-foreground/60">Nessun modulo trovato in src/moderation o src/utilities</div>}
+            {modules.length === 0 && <div className="px-4 py-5 text-sm text-foreground/60">Nessun modulo trovato in src/modules</div>}
           </div>
         </div>
       )}

@@ -701,7 +701,7 @@ async function listDirectory(config, relativePath = ".") {
 
 async function scanModules(config) {
   // Cerca solo le cartelle in root/core/src/modules
-  const modulesDir = resolveSandboxPath(config, "src/modules");
+  const modulesDir = resolveSandboxPath(config, "modules");
   if (!fs.existsSync(modulesDir)) return [];
   const entries = await fs.promises.readdir(modulesDir, { withFileTypes: true });
   return entries
@@ -3692,9 +3692,10 @@ app.get("/api/bot/modules", async (req, res) => {
     const config = getBotConfig();
     const available = await scanModules(config);
     const enabledMap = db.data.bot_modules || {};
+    // Se la mappa enabled è vuota, considera tutti i moduli trovati come enabled
     const modules = available.map((name) => ({
       name,
-      enabled: Boolean(enabledMap[name]),
+      enabled: enabledMap[name] !== false,
     }));
     res.json({ modules });
   } catch (err) {
