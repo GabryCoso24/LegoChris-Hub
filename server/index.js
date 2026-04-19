@@ -719,7 +719,7 @@ function sanitizeCogName(value, fallback = "generated_command") {
 }
 
 function normalizeCogRelativePath(relativePath, fallbackName = "generated_command") {
-  const fallbackFile = `src/utilities/generated/${sanitizeCogName(fallbackName)}.js`;
+  const fallbackFile = `generated/${sanitizeCogName(fallbackName)}.js`;
   const raw = String(relativePath || "").trim().replace(/\\/g, "/");
   let normalized = raw || fallbackFile;
   normalized = normalized.replace(/^\/+/, "");
@@ -764,103 +764,36 @@ function relativeCogPathToModuleName(relativePath) {
 
 function generateNodeBody(node) {
   const config = typeof node?.config === "object" && node.config ? node.config : {};
-  const value = String(node.payload || "").replace(/"""/g, "'''");
+  const value = String(node.payload || "");
   switch (node.type) {
     case "log_console":
-      return `print(self._render_template("""${value || "log"}""", variables))\n`;
+      return `console.log(${JSON.stringify(value || "log")});\n`;
     case "variable_set": {
-      const variableName = String(config.variableName || value || "new_variable").replace(/"""/g, "'''");
-      const variableType = String(config.valueType || "string").replace(/"""/g, "'''");
-      const variableValue = String(config.value || "").replace(/"""/g, "'''");
-      return `variables["""${variableName}"""] = self._coerce_literal("""${variableValue}""", """${variableType}""", variables)\n`;
-    }
-    case "json_save": {
-      const filePath = String(config.filePath || value || "data/settings.json").replace(/"""/g, "'''");
-      const variableName = String(config.variableName || "").replace(/"""/g, "'''");
-      return `json_target = variables.get("""${variableName}""") if """${variableName}""" else variables\nawait self._save_json(self._render_template("""${filePath}""", variables), json_target)\n`;
-    }
-    case "json_load": {
-      const filePath = String(config.filePath || value || "data/settings.json").replace(/"""/g, "'''");
-      const targetVariable = String(config.targetVariable || "loaded_data").replace(/"""/g, "'''");
-      return `variables["""${targetVariable}"""] = await self._load_json(self._render_template("""${filePath}""", variables))\n`;
+      const variableName = String(config.variableName || value || "new_variable");
+      const variableValue = String(config.value || "");
+      return `variables[${JSON.stringify(variableName)}] = ${JSON.stringify(variableValue)};\n`;
     }
     case "send_message":
-      return `await self._send_text(target, self._render_template("""${value || "message"}""", variables))\n`;
+      return `await interaction.reply({ content: ${JSON.stringify(value || "message")} });\n`;
     case "send_embed": {
-      const description = String(config.description || value || "embed").replace(/"""/g, "'''");
-      const title = String(config.title || "").replace(/"""/g, "'''");
-      const color = String(config.color || "").replace(/"""/g, "'''");
-      const footer = String(config.footer || "").replace(/"""/g, "'''");
-      const footerIcon = String(config.footerIconUrl || "").replace(/"""/g, "'''");
-      const authorName = String(config.authorName || "").replace(/"""/g, "'''");
-      const authorIcon = String(config.authorIconUrl || "").replace(/"""/g, "'''");
-      const thumbnailUrl = String(config.thumbnailUrl || "").replace(/"""/g, "'''");
-      const imageUrl = String(config.imageUrl || "").replace(/"""/g, "'''");
-      const componentMode = String(config.componentMode || "none").replace(/"""/g, "'''");
-      const buttonsJson = String(config.buttonsJson || "[]").replace(/"""/g, "'''");
-      const selectPlaceholder = String(config.selectPlaceholder || "Scegli un'opzione").replace(/"""/g, "'''");
-      const selectOptionsJson = String(config.selectOptionsJson || "[]").replace(/"""/g, "'''");
-      const selectMinValues = String(config.selectMinValues || "1").replace(/"""/g, "'''");
-      const selectMaxValues = String(config.selectMaxValues || "1").replace(/"""/g, "'''");
-      const fieldsJson = String(config.fieldsJson || "[]").replace(/"""/g, "'''");
-      const timestampMode = String(config.timestampMode || (String(config.timestamp || "false").toLowerCase() === "true" ? "auto" : "none")).replace(/"""/g, "'''");
-      const timestampValue = String(config.timestampValue || "").replace(/"""/g, "'''");
-      return `embed = discord.Embed(\n    title=self._render_template("""${title}""", variables) or None,\n    description=self._render_template("""${description}""", variables) or None,\n    color=self._parse_embed_color(self._render_template("""${color}""", variables)),\n)\nmedia_files = self._apply_embed_media(embed, variables, """${authorIcon}""", """${footerIcon}""", """${thumbnailUrl}""", """${imageUrl}""")\nself._apply_embed_author(embed, variables, """${authorName}""")\nself._apply_embed_footer(embed, variables, """${footer}""")\nself._apply_embed_fields(embed, variables, """${fieldsJson}""")\nself._apply_embed_timestamp(embed, variables, """${timestampMode}""", """${timestampValue}""")\nview = self._build_embed_view(target, variables, """${componentMode}""", """${buttonsJson}""", """${selectPlaceholder}""", """${selectOptionsJson}""", """${selectMinValues}""", """${selectMaxValues}""")\nawait self._send_embed(target, embed, media_files, view=view)\n`;
-    }
-    case "add_role":
-    case "remove_role": {
-      const action = node.type === "add_role" ? "add_roles" : "remove_roles";
-      const roleName = String(config.roleName || value || "role").replace(/"""/g, "'''");
-      const targetType = String(config.targetType || "author").replace(/"""/g, "'''");
-      const targetVariable = String(config.targetVariable || "").replace(/"""/g, "'''");
-      return `role_name = self._render_template("""${roleName}""", variables)\nguild = self._get_guild(target)\nmember = await self._resolve_member_target(target, variables, """${targetType}""", """${targetVariable}""")\nrole = self._resolve_role(guild, role_name)\nif role and member:\n    await member.${action}(role)\n`;
-    }
-    case "condition_text_contains":
-      return `content = self._get_content(target)\nif self._render_template("""${value || ""}""", variables) not in content:\n    return\n`;
-    case "condition_select": {
-      const options = value
-        .split("|")
-        .map((item) => item.trim())
-        .filter(Boolean);
-      if (options.length === 0) {
-        return "";
+      const description = String(config.description || value || "embed");
+      const title = String(config.title || "");
+      const color = String(config.color || "");
+      const footer = String(config.footer || "");
+      const authorName = String(config.authorName || "");
+      let embedCode = `const { EmbedBuilder } = require('discord.js');\nconst embed = new EmbedBuilder()\n  .setTitle(${JSON.stringify(title)})\n  .setDescription(${JSON.stringify(description)})\n  .setColor(${JSON.stringify(color || '#0099ff')})`;
+      if (footer) {
+        embedCode += `\n  .setFooter({ text: ${JSON.stringify(footer)} })`;
       }
-      const clauses = options
-        .map((item, index) => {
-          const escaped = item.replace(/"""/g, "'''");
-          return index === 0
-            ? `if self._render_template("""${escaped}""", variables) in content:\n    pass\n`
-            : `elif self._render_template("""${escaped}""", variables) in content:\n    pass\n`;
-        })
-        .join("");
-      return `content = self._get_content(target)\n${clauses}else:\n    return\n`;
+      if (authorName) {
+        embedCode += `\n  .setAuthor({ name: ${JSON.stringify(authorName)} })`;
+      }
+      embedCode += `;\nawait interaction.reply({ embeds: [embed] });\n`;
+      return embedCode;
     }
-    case "loop_count": {
-      const parsed = Number.parseInt(value, 10);
-      const count = Number.isFinite(parsed) && parsed > 0 ? Math.min(parsed, 25) : 3;
-      return `for _ in range(${count}):\n    await self._send_text(target, self._render_template("""Loop step""", variables))\n`;
-    }
-    case "function_call": {
-      const functionName = (value || "custom_flow")
-        .toLowerCase()
-        .replace(/[^a-z0-9_]/g, "") || "custom_flow";
-      const assignTo = String(config.assignTo || "").replace(/"""/g, "'''");
-      return `fn = getattr(self, "${functionName}", None)\nif callable(fn):\n    result = await fn(target, variables)\n    self._store_return_values(variables, """${assignTo}""", result)\n`;
-    }
-    case "function_define":
-      return "";
-    case "return_values": {
-      const values = String(config.values || value || "").replace(/"""/g, "'''");
-      return `return self._resolve_return_values("""${values}""", variables)\n`;
-    }
-    case "call_existing_command": {
-      const commandName = (value || "help")
-        .toLowerCase()
-        .replace(/[^a-z0-9_]/g, "") || "help";
-      return `invoked = await self._invoke_prefixed_command(target, "${commandName}")\nif not invoked:\n    await self._send_text(target, """Il comando ${commandName} richiede un contesto prefix""")\n`;
-    }
+    // Add more node types as needed, for now fallback to comment
     default:
-      return "";
+      return `// [Unimplemented node type: ${node.type}]\n`;
   }
 }
 
@@ -954,418 +887,25 @@ async function compileFlowToCog(config, flow, options = {}) {
   const body = bodyFromNodes || `print("""Avvio comando ${effectiveCommand} avvenuto""")\nawait self._send_text(target, """${fallbackMessage}""")\n`;
   const commandBody = indentBlock(body, 8);
 
-  const className = `${safeName[0].toUpperCase() + safeName.slice(1)}Cog`;
-  const runtimeHelpers = `
-    async def _send_text(self, target, message):
-        if isinstance(target, discord.Interaction):
-            if target.response.is_done():
-                await target.followup.send(message)
-            else:
-                await target.response.send_message(message)
-            return
-        await target.send(message)
+    // Python helpers removed: non più usati nella generazione JS
+  // JavaScript (discord.js) module template
+  const source = `const { SlashCommandBuilder } = require('discord.js');
 
-    async def _send_embed(self, target, embed, files=None, view=None):
-      files = list(files or [])
-      if isinstance(target, discord.Interaction):
-        if target.response.is_done():
-          await target.followup.send(embed=embed, files=files, view=view)
-        else:
-          await target.response.send_message(embed=embed, files=files, view=view)
-        return
-      await target.send(embed=embed, files=files, view=view)
-
-    def _get_guild(self, target):
-        return getattr(target, "guild", None)
-
-    def _get_author(self, target):
-        if isinstance(target, discord.Interaction):
-            return getattr(target, "user", None)
-        return getattr(target, "author", None)
-
-    def _get_content(self, target):
-        message = getattr(target, "message", None)
-        if message and getattr(message, "content", None):
-            return message.content
-        data = getattr(target, "data", None)
-        if isinstance(data, dict):
-            options = data.get("options") or []
-            values = []
-            for option in options:
-                if isinstance(option, dict) and option.get("value") is not None:
-                    values.append(str(option["value"]))
-            return " ".join(values)
-        return ""
-
-    def _render_template(self, value, variables):
-        rendered = str(value or "")
-        for key, item in (variables or {}).items():
-            rendered = rendered.replace(f"{{{{{key}}}}}", str(item))
-        return rendered
-
-    def _parse_embed_color(self, value):
-        raw = str(value or "").strip().lstrip("#")
-        if not raw:
-            return None
-        try:
-            return discord.Color(int(raw, 16))
-        except ValueError:
-            return None
-
-    def _apply_embed_footer(self, embed, variables, text_value):
-        text = self._render_template(text_value, variables)
-        kwargs = {}
-        if text:
-            kwargs["text"] = text
-        if kwargs:
-            embed.set_footer(**kwargs)
-
-    def _apply_embed_author(self, embed, variables, name_value):
-        name = self._render_template(name_value, variables)
-        kwargs = {}
-        if name:
-            kwargs["name"] = name
-        if kwargs:
-            embed.set_author(**kwargs)
-
-    def _sanitize_function_name(self, value):
-      raw = str(value or "").strip().lower()
-      normalized = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in raw)
-      normalized = "_".join(part for part in normalized.split("_") if part)
-      return normalized
-
-    async def _run_component_function(self, function_name, interaction, base_variables=None):
-      fn_name = self._sanitize_function_name(function_name)
-      if not fn_name:
-        return None
-      fn = getattr(self, fn_name, None)
-      if not callable(fn):
-        return None
-      scoped_variables = dict(base_variables or {})
-      scoped_variables["component_user_id"] = getattr(getattr(interaction, "user", None), "id", None)
-      scoped_variables["component_custom_id"] = getattr(getattr(interaction, "data", None), "get", lambda *_: None)("custom_id") if isinstance(getattr(interaction, "data", None), dict) else None
-      return await fn(interaction, scoped_variables)
-
-    def _button_style_from_value(self, value):
-      style = str(value or "primary").strip().lower()
-      if style == "secondary":
-        return discord.ButtonStyle.secondary
-      if style == "success":
-        return discord.ButtonStyle.success
-      if style == "danger":
-        return discord.ButtonStyle.danger
-      return discord.ButtonStyle.primary
-
-    def _parse_json_array(self, raw_value):
-      rendered = str(raw_value or "").strip()
-      if not rendered:
-        return []
-      try:
-        parsed = json.loads(rendered)
-      except json.JSONDecodeError:
-        return []
-      return parsed if isinstance(parsed, list) else []
-
-    def _is_remote_media(self, value):
-        lowered = str(value or "").strip().lower()
-        return lowered.startswith("http://") or lowered.startswith("https://") or lowered.startswith("attachment://")
-
-    def _resolve_local_media_path(self, value):
-        raw = str(value or "").strip()
-        if not raw:
-            return None
-        normalized = os.path.normpath(raw)
-        candidates = []
-        if os.path.isabs(normalized):
-            candidates.append(normalized)
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        candidates.extend([
-            os.path.abspath(os.path.join(base_dir, normalized)),
-            os.path.abspath(os.path.join(base_dir, "..", normalized)),
-            os.path.abspath(os.path.join(base_dir, "..", "..", normalized)),
-        ])
-        for candidate in candidates:
-            if os.path.isfile(candidate):
-                return candidate
-        return None
-
-    def _resolve_embed_media_reference(self, attachments, media_type, media_value):
-        value = str(media_value or "").strip()
-        if not value:
-            return ""
-        if self._is_remote_media(value):
-            return value
-        local_path = self._resolve_local_media_path(value)
-        if not local_path:
-            return ""
-        base_name = os.path.basename(local_path)
-        attachment_name = f"{media_type}_{base_name}"
-        try:
-            file_handle = discord.File(local_path, filename=attachment_name)
-        except Exception:
-            return ""
-        attachments.append(file_handle)
-        return f"attachment://{attachment_name}"
-
-    def _apply_embed_media(self, embed, variables, author_icon_value, footer_icon_value, thumbnail_value, image_value):
-        attachments = []
-        author_icon_url = self._resolve_embed_media_reference(attachments, "author_icon", self._render_template(author_icon_value, variables).strip())
-        footer_icon_url = self._resolve_embed_media_reference(attachments, "footer_icon", self._render_template(footer_icon_value, variables).strip())
-        thumbnail_url = self._resolve_embed_media_reference(attachments, "thumbnail", self._render_template(thumbnail_value, variables).strip())
-        image_url = self._resolve_embed_media_reference(attachments, "image", self._render_template(image_value, variables).strip())
-
-        if thumbnail_url:
-            embed.set_thumbnail(url=thumbnail_url)
-        if image_url:
-            embed.set_image(url=image_url)
-
-        if embed.author:
-            author_name = str(getattr(embed.author, "name", "") or "")
-          if author_name or author_icon_url:
-                kwargs = {}
-                if author_name:
-                    kwargs["name"] = author_name
-                if author_icon_url:
-                    kwargs["icon_url"] = author_icon_url
-                if kwargs:
-                    embed.set_author(**kwargs)
-
-        if embed.footer:
-            footer_text = str(getattr(embed.footer, "text", "") or "")
-            if footer_text or footer_icon_url:
-                kwargs = {}
-                if footer_text:
-                    kwargs["text"] = footer_text
-                if footer_icon_url:
-                    kwargs["icon_url"] = footer_icon_url
-                if kwargs:
-                    embed.set_footer(**kwargs)
-
-        return attachments
-
-          def _build_embed_view(self, target, variables, component_mode, buttons_json, select_placeholder, select_options_json, select_min_values, select_max_values):
-            mode = str(component_mode or "none").strip().lower()
-            if mode not in ("buttons", "select"):
-              return None
-
-            view = discord.ui.View(timeout=300)
-
-            if mode == "buttons":
-              buttons = self._parse_json_array(self._render_template(buttons_json, variables))
-              for index, item in enumerate(buttons[:5]):
-                if not isinstance(item, dict):
-                  continue
-                label = str(item.get("label") or f"Pulsante {index + 1}").strip()[:80]
-                function_name = str(item.get("functionName") or "").strip()
-                style = self._button_style_from_value(item.get("style"))
-                button = discord.ui.Button(label=label or f"Pulsante {index + 1}", style=style, custom_id=f"wf_btn_{index}_{self._sanitize_function_name(function_name) or 'none'}")
-
-                async def _button_callback(interaction, fn_name=function_name):
-                  if not interaction.response.is_done():
-                    await interaction.response.defer()
-                  await self._run_component_function(fn_name, interaction, variables)
-
-                button.callback = _button_callback
-                view.add_item(button)
-
-            elif mode == "select":
-              options_raw = self._parse_json_array(self._render_template(select_options_json, variables))
-              parsed_options = []
-              action_map = {}
-
-              for index, item in enumerate(options_raw[:25]):
-                if not isinstance(item, dict):
-                  continue
-                label = str(item.get("label") or f"Opzione {index + 1}").strip()[:100]
-                value = str(item.get("value") or f"option_{index + 1}").strip()[:100]
-                description = str(item.get("description") or "").strip()[:100]
-                fn_name = str(item.get("functionName") or "").strip()
-                if not label or not value:
-                  continue
-                parsed_options.append(discord.SelectOption(label=label, value=value, description=description or None))
-                action_map[value] = fn_name
-
-              if parsed_options:
-                max_allowed = len(parsed_options)
-                try:
-                  parsed_min = int(str(select_min_values or "1") or "1")
-                except ValueError:
-                  parsed_min = 1
-                try:
-                  parsed_max = int(str(select_max_values or "1") or "1")
-                except ValueError:
-                  parsed_max = 1
-                min_values = max(1, min(max_allowed, parsed_min))
-                max_values = max(min_values, min(max_allowed, parsed_max))
-
-                select = discord.ui.Select(
-                  placeholder=str(select_placeholder or "Scegli un'opzione")[:150],
-                  min_values=min_values,
-                  max_values=max_values,
-                  options=parsed_options,
-                  custom_id="wf_select",
-                )
-
-                async def _select_callback(interaction, mapping=action_map):
-                  data = getattr(interaction, "data", None)
-                  values = data.get("values") if isinstance(data, dict) else []
-                  selected_value = str(values[0]) if values else ""
-                  if not interaction.response.is_done():
-                    await interaction.response.defer()
-                  if selected_value:
-                    await self._run_component_function(mapping.get(selected_value, ""), interaction, variables)
-
-                select.callback = _select_callback
-                view.add_item(select)
-
-            return view if view.children else None
-
-    def _apply_embed_fields(self, embed, variables, fields_json):
-        rendered = self._render_template(fields_json, variables).strip()
-        if not rendered:
-            return
-        try:
-            fields = json.loads(rendered)
-        except json.JSONDecodeError:
-            return
-        if not isinstance(fields, list):
-            return
-        for item in fields[:25]:
-            if not isinstance(item, dict):
-                continue
-            name = str(item.get("name") or "").strip()
-            value = str(item.get("value") or "").strip()
-            if not name or not value:
-                continue
-            embed.add_field(name=name, value=value, inline=bool(item.get("inline", False)))
-
-    def _apply_embed_timestamp(self, embed, variables, timestamp_mode, timestamp_value):
-        mode = str(timestamp_mode or "none").lower()
-        if mode == "auto":
-            embed.timestamp = discord.utils.utcnow()
-            return
-        if mode != "custom":
-            return
-        rendered = self._render_template(timestamp_value, variables).strip()
-        if not rendered:
-            return
-        parsed = discord.utils.parse_time(rendered)
-        if parsed:
-            embed.timestamp = parsed
-
-    def _coerce_literal(self, value, value_type, variables):
-        rendered = self._render_template(value, variables)
-        kind = str(value_type or "string").lower()
-        if kind == "number":
-            try:
-                numeric = float(rendered)
-                return int(numeric) if numeric.is_integer() else numeric
-            except ValueError:
-                return 0
-        if kind == "boolean":
-            return rendered.strip().lower() in ("true", "1", "yes", "si", "on")
-        if kind == "json":
-            try:
-                return json.loads(rendered)
-            except json.JSONDecodeError:
-                return {}
-        if kind == "list":
-            try:
-                parsed = json.loads(rendered)
-                if isinstance(parsed, list):
-                    return parsed
-            except json.JSONDecodeError:
-                pass
-            return [item.strip() for item in rendered.split(",") if item.strip()]
-        if kind == "null":
-            return None
-        return rendered
-
-    def _resolve_return_token(self, token, variables):
-        raw = str(token or "").strip()
-        if raw in (variables or {}):
-            return variables[raw]
-        rendered = self._render_template(raw, variables)
-        lowered = rendered.lower()
-        if lowered in ("none", "null"):
-            return None
-        if lowered == "true":
-            return True
-        if lowered == "false":
-            return False
-        try:
-            return json.loads(rendered)
-        except json.JSONDecodeError:
-            return rendered
-
-    def _resolve_return_values(self, values_csv, variables):
-        parts = [item.strip() for item in str(values_csv or "").split(",") if item.strip()]
-        if not parts:
-            return None
-        resolved = tuple(self._resolve_return_token(item, variables) for item in parts)
-        return resolved if len(resolved) > 1 else resolved[0]
-
-    def _store_return_values(self, variables, names_csv, result):
-        names = [item.strip() for item in str(names_csv or "").split(",") if item.strip()]
-        if not names:
-            return
-        values = result if isinstance(result, tuple) else (result,)
-        for index, name in enumerate(names):
-            variables[name] = values[index] if index < len(values) else None
-
-    async def _save_json(self, file_path, data):
-        directory = os.path.dirname(file_path)
-        if directory:
-            os.makedirs(directory, exist_ok=True)
-        with open(file_path, "w", encoding="utf-8") as file_handle:
-            json.dump(data, file_handle, ensure_ascii=False, indent=2)
-
-    async def _load_json(self, file_path):
-        if not os.path.exists(file_path):
-            return {}
-        with open(file_path, "r", encoding="utf-8") as file_handle:
-            return json.load(file_handle)
-
-    async def _invoke_prefixed_command(self, target, command_name):
-        if not hasattr(target, "invoke"):
-            return False
-        cmd = self.bot.get_command(command_name)
-        if not cmd:
-            return False
-        await target.invoke(cmd)
-        return True
-
-    def _resolve_role(self, guild, role_value):
-        if not guild:
-            return None
-        raw = str(role_value or "").strip()
-        if not raw:
-            return None
-        try:
-            return guild.get_role(int(raw))
-        except (TypeError, ValueError):
-            return discord.utils.get(guild.roles, name=raw)
-
-    async def _resolve_member_target(self, target, variables, target_type, target_variable):
-        guild = self._get_guild(target)
-        if not guild:
-            return None
-        resolved_type = str(target_type or "author").lower()
-        if resolved_type == "author":
-            author = self._get_author(target)
-            return author if isinstance(author, discord.Member) else guild.get_member(getattr(author, "id", 0))
-        if resolved_type == "guild_owner":
-            return guild.owner
-        if resolved_type == "user_id_variable":
-            variable_name = str(target_variable or "").strip()
-            user_id = (variables or {}).get(variable_name)
-            try:
-                return guild.get_member(int(user_id))
-            except (TypeError, ValueError):
-                return None
-        return None
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName('${effectiveCommand}')
+    .setDescription('${(flow.description || fallbackMessage).replace(/'/g, "\\'")}'),
+  async execute(interaction) {
+    // Variables and helpers
+    let variables = {};
+    // Command logic
+${bodyFromNodes
+      .split('\n')
+      .map(line => '    ' + line)
+      .join('\n')}
+  },
+};
 `;
-  const source = `import json\nimport os\nimport discord\nfrom discord import app_commands\nfrom discord.ext import commands\n\nclass ${className}(commands.Cog):\n    def __init__(self, bot):\n        self.bot = bot\n${runtimeHelpers}\n    ${decorator}\n    async def ${commandHandlerName}(self, ${commandParameter}):\n        target = ${commandTarget}\n        variables = {}\n${commandBody}\n${functionMethods}\nasync def setup(bot):\n    await bot.add_cog(${className}(bot))\n`;
 
   if (writeToDisk) {
     await fs.promises.writeFile(outPath, source, "utf8");

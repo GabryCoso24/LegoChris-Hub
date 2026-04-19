@@ -255,7 +255,7 @@ function getDefaultBuilderEdges(): BuilderEdge[] {
 }
 
 function getDefaultBuilderTargetPath(name: string) {
-  return `src/utilities/generated/${sanitizeBuilderName(name)}.js`;
+  return `generated/${sanitizeBuilderName(name)}.js`;
 }
 
 function moduleToScriptPath(moduleName: string) {
