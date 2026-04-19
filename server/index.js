@@ -228,7 +228,7 @@ db.data.bot_config ||= {};
 await db.write();
 
 // Discord Bot Control Panel - foundation
-const defaultBotRootPath = path.resolve(process.env.BOT_ROOT_PATH || "/home/gabrycoso/LegoChrisBot_V2");
+const defaultBotRootPath = path.resolve(process.env.BOT_ROOT_PATH || "/home/gabrycoso/LegoChrisBot_V2/core");
 const defaultBotEntryScript = process.env.BOT_ENTRY_SCRIPT || "src/index.js";
 const defaultBotRuntimeCommand = process.env.BOT_RUNTIME_COMMAND || process.env.BOT_NODE_COMMAND || "node";
 const defaultPm2ProcessName = process.env.BOT_PM2_PROCESS_NAME || "lc-bot";
@@ -699,68 +699,15 @@ async function listDirectory(config, relativePath = ".") {
   return mapped;
 }
 
-async function scanCogs(config) {
-  const modules = new Set();
-
-  const configuredScanRoots = String(process.env.BOT_MODULE_DIRS || "src/moderation,src/utilities,cogs")
-    .split(",")
-    .map((value) => value.trim().replace(/\\/g, "/"))
-    .filter(Boolean);
-
-  async function walkModuleDir(scanRoot) {
-    let absRoot;
-    try {
-      absRoot = resolveSandboxPath(config, scanRoot);
-    } catch {
-      return;
-    }
-    if (!fs.existsSync(absRoot)) return;
-
-    const isLegacyCogs = scanRoot === "cogs";
-    const rootSegments = scanRoot.split("/").filter(Boolean);
-    const logicalPrefix = isLegacyCogs ? "" : (rootSegments[rootSegments.length - 1] || "");
-
-    async function walk(relativeDir = "") {
-      const absDir = path.join(absRoot, relativeDir);
-      const files = await fs.promises.readdir(absDir, { withFileTypes: true });
-      for (const entry of files) {
-        if (entry.name === "__pycache__") continue;
-        if (entry.isDirectory()) {
-          await walk(path.join(relativeDir, entry.name));
-          continue;
-        }
-        if (!entry.isFile()) continue;
-
-        if (isLegacyCogs) {
-          if (!entry.name.endsWith(".py") || entry.name === "__init__.py") continue;
-          const noExt = entry.name.replace(/\.py$/, "");
-          const rel = path.join(relativeDir, noExt).replace(/\\/g, ".");
-          if (rel || noExt) {
-            modules.add(rel || noExt);
-          }
-          continue;
-        }
-
-        if (!/\.(js|mjs|cjs)$/i.test(entry.name)) continue;
-
-        const noExt = entry.name.replace(/\.(js|mjs|cjs)$/i, "");
-        const relParts = path.join(relativeDir, noExt).replace(/\\/g, "/").split("/").filter(Boolean);
-        const normalizedParts = relParts.filter((part, index) => !(part === "index" && index === relParts.length - 1));
-        const moduleParts = [logicalPrefix, ...normalizedParts].filter(Boolean);
-        if (moduleParts.length > 0) {
-          modules.add(moduleParts.join("."));
-        }
-      }
-    }
-
-    await walk("");
-  }
-
-  for (const scanRoot of configuredScanRoots) {
-    await walkModuleDir(scanRoot);
-  }
-
-  return Array.from(modules).sort((a, b) => a.localeCompare(b));
+async function scanModules(config) {
+  // Cerca solo le cartelle in root/core/src/modules
+  const modulesDir = resolveSandboxPath(config, "src/modules");
+  if (!fs.existsSync(modulesDir)) return [];
+  const entries = await fs.promises.readdir(modulesDir, { withFileTypes: true });
+  return entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort((a, b) => a.localeCompare(b));
 }
 
 function sanitizeCogName(value, fallback = "generated_command") {
@@ -3743,7 +3690,7 @@ app.get("/api/bot/modules", async (req, res) => {
   try {
     await db.read();
     const config = getBotConfig();
-    const available = await scanCogs(config);
+    const available = await scanModules(config);
     const enabledMap = db.data.bot_modules || {};
     const modules = available.map((name) => ({
       name,
@@ -3760,7 +3707,7 @@ app.put("/api/bot/modules", async (req, res) => {
     await db.read();
     const config = getBotConfig();
     const enabled = Array.isArray(req.body?.enabled) ? req.body.enabled : [];
-    const available = await scanCogs(config);
+    const available = await scanModules(config);
     const enabledMap = {};
     for (const name of available) {
       enabledMap[name] = enabled.includes(name);
