@@ -1,3 +1,8 @@
+---
+
+## Documentation Language
+
+As of April 2026, all new documentation and changelogs are provided in English. Previous sections may be in Italian, but all recent and future updates will be in English for broader accessibility.
 # LegoChris Hub
 
 A comprehensive web application for managing content, e-commerce, and community engagement for the LegoChris YouTube channel.
@@ -1113,14 +1118,15 @@ Found a bug? Open an issue on GitHub with:
 - Cross-browser compatibility improvements
 
 
-### Recent Updates (Aprile 2026)
+
+### Recent Updates (April 2026)
 
 🛠️ **Discord Bot Code Generation:**
-- La generazione dei comandi Discord ora produce solo JavaScript valido (niente più Python nei file generati).
-- Corretto l'import di EmbedBuilder: `const { EmbedBuilder } = require('discord.js');`.
+- Command generation for the Discord bot now produces only valid JavaScript (no more Python in generated files).
+- Fixed EmbedBuilder import: `const { EmbedBuilder } = require('discord.js');`.
 
 🖥️ **Admin Panel – PM2 Log Scroll:**
-- Il log del processo PM2 nella sezione "Overview" ora scrolla sempre in fondo automaticamente, anche dopo aver cambiato tab.
+- The PM2 process log in the "Overview" section now always scrolls to the bottom automatically, even after switching tabs.
 
 ---
 
