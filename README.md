@@ -1112,6 +1112,18 @@ Found a bug? Open an issue on GitHub with:
 - Dynamic "time ago" formatting
 - Cross-browser compatibility improvements
 
+
+### Recent Updates (Aprile 2026)
+
+🛠️ **Discord Bot Code Generation:**
+- La generazione dei comandi Discord ora produce solo JavaScript valido (niente più Python nei file generati).
+- Corretto l'import di EmbedBuilder: `const { EmbedBuilder } = require('discord.js');`.
+
+🖥️ **Admin Panel – PM2 Log Scroll:**
+- Il log del processo PM2 nella sezione "Overview" ora scrolla sempre in fondo automaticamente, anche dopo aver cambiato tab.
+
+---
+
 ### Recent Updates (February 2026)
 
 🎨 **UI/UX Enhancements:**
