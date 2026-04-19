@@ -1537,11 +1537,22 @@ export default function DiscordBotManager() {
     return () => clearInterval(interval);
   }, []);
 
+
   useEffect(() => {
     const container = logsContainerRef.current;
     if (!container) return;
     container.scrollTop = container.scrollHeight;
   }, [logs]);
+
+  // Scroll to bottom when switching to overview tab
+  useEffect(() => {
+    if (section === "overview") {
+      const container = logsContainerRef.current;
+      if (container) {
+        container.scrollTop = container.scrollHeight;
+      }
+    }
+  }, [section]);
 
   useEffect(() => {
     if (section === "modules") {
