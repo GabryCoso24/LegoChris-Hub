@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Package, Euro, Calendar, Search, Truck, CheckCircle, Clock, Ban, Mail, Save } from "lucide-react";
+import { Package, Euro, Calendar, Search, Truck, CheckCircle, Clock, Ban, Mail, Save, User, Phone, Link } from "lucide-react";
 import { API_URL } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -279,8 +279,9 @@ export default function OrdersManager() {
                           {config.label}
                         </div>
                         {order.tracking_number && (
-                          <Badge variant="outline" className="text-xs">
-                            🔗 {order.tracking_number}
+                          <Badge variant="outline" className="flex items-center gap-1 text-xs">
+                            <Link className="w-3 h-3" />
+                            {order.tracking_number}
                           </Badge>
                         )}
                       </div>
@@ -300,7 +301,10 @@ export default function OrdersManager() {
                           {getTotalItems(order)} {getTotalItems(order) === 1 ? 'articolo' : 'articoli'}
                         </span>
                         {order.customer_name && (
-                          <span className="truncate">👤 {order.customer_name}</span>
+                          <span className="flex items-center gap-1 truncate">
+                            <User className="h-3 w-3" />
+                            {order.customer_name}
+                          </span>
                         )}
                       </CardDescription>
                     </div>
@@ -388,17 +392,25 @@ export default function OrdersManager() {
 
                       {/* Customer Info */}
                       <div className="p-3 md:p-4 rounded-lg bg-secondary/30">
-                        <h4 className="font-medium text-xs md:text-sm text-muted-foreground mb-2">👤 Cliente</h4>
+                        <h4 className="flex items-center gap-2 font-medium text-xs md:text-sm text-muted-foreground mb-2">
+                          <User className="w-4 h-4" /> Cliente
+                        </h4>
                         <p className="font-medium text-sm md:text-base break-words">{order.customer_name || 'N/A'}</p>
-                        <p className="text-xs md:text-sm text-muted-foreground break-all">📧 {order.customer_email}</p>
+                        <p className="flex items-center gap-2 text-xs md:text-sm text-muted-foreground break-all mt-1">
+                          <Mail className="w-3.5 h-3.5" /> {order.customer_email}
+                        </p>
                         {order.customer_phone && (
-                          <p className="text-xs md:text-sm text-muted-foreground">📱 {order.customer_phone}</p>
+                          <p className="flex items-center gap-2 text-xs md:text-sm text-muted-foreground mt-1">
+                            <Phone className="w-3.5 h-3.5" /> {order.customer_phone}
+                          </p>
                         )}
                       </div>
 
                       {/* Items */}
                       <div>
-                        <h4 className="font-medium text-xs md:text-sm text-muted-foreground mb-2 md:mb-3">📦 Articoli</h4>
+                        <h4 className="flex items-center gap-2 font-medium text-xs md:text-sm text-muted-foreground mb-2 md:mb-3">
+                          <Package className="w-4 h-4" /> Articoli
+                        </h4>
                         <div className="space-y-2">
                           {order.items.map((item, idx) => (
                             <div
@@ -427,7 +439,9 @@ export default function OrdersManager() {
                       {/* Shipping Address */}
                       {order.shipping_address && (
                         <div className="p-3 md:p-4 rounded-lg bg-secondary/30">
-                          <h4 className="font-medium text-xs md:text-sm text-muted-foreground mb-2">🚚 Indirizzo di Spedizione</h4>
+                          <h4 className="flex items-center gap-2 font-medium text-xs md:text-sm text-muted-foreground mb-2">
+                            <Truck className="w-4 h-4" /> Indirizzo di Spedizione
+                          </h4>
                           <p className="font-medium text-sm md:text-base break-words">{order.shipping_name || order.customer_name}</p>
                           <p className="text-xs md:text-sm text-muted-foreground mt-1">
                             {order.shipping_address.line1}<br />

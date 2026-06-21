@@ -174,7 +174,7 @@ function FlipCard({ member, icon }: { member: Member; icon: React.ReactNode }) {
           }}
         >
           <div className="text-sm font-semibold text-center mb-2">{member.username}</div>
-          <div className="text-xs text-foreground/80 text-center overflow-y-auto max-h-32">
+          <div className="text-xs text-foreground/80 text-center overflow-y-auto max-h-32 scrollbar-thin scrollbar-thumb-primary/20 scrollbar-track-transparent hover:scrollbar-thumb-primary/40">
             {member.description || "Nessuna descrizione disponibile"}
           </div>
         </div>

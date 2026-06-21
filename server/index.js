@@ -61,8 +61,8 @@ if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim();
 const stripe = stripeSecretKey
   ? new Stripe(stripeSecretKey, {
-      apiVersion: "2024-12-18.acacia",
-    })
+    apiVersion: "2024-12-18.acacia",
+  })
   : null;
 
 if (!stripe) {
@@ -153,7 +153,7 @@ const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps, curl, postman)
     if (!origin) return callback(null, true);
-    
+
     const allowedOrigins = [
       'http://localhost:5173',
       'http://localhost:3000',
@@ -162,7 +162,7 @@ const corsOptions = {
       process.env.FRONTEND_URL,
       process.env.PUBLIC_BASE_URL,
     ].filter(Boolean);
-    
+
     // Check if origin matches any allowed origin or is a local development URL
     if (allowedOrigins.includes(origin) || origin.startsWith('http://localhost') || origin.includes('192.168.')) {
       callback(null, true);
@@ -186,15 +186,15 @@ app.use(express.static(path.join(__dirname, "public")));
 // Initialize LowDB database
 const dbPath = path.join(__dirname, "data.json");
 const adapter = new JSONFile(dbPath);
-const db = new Low(adapter, { 
-  team: [], 
-  staff: [], 
+const db = new Low(adapter, {
+  team: [],
+  staff: [],
   events: [],
   schedule: [],
-  products: [], 
-  playlists: [], 
-  videos: [], 
-  newsletter: [], 
+  products: [],
+  playlists: [],
+  videos: [],
+  newsletter: [],
   orders: [],
   passwordResetTokens: [],
   profiles: [],
@@ -204,15 +204,15 @@ const db = new Low(adapter, {
 });
 
 await db.read();
-db.data ||= { 
-  team: [], 
-  staff: [], 
+db.data ||= {
+  team: [],
+  staff: [],
   events: [],
   schedule: [],
-  products: [], 
-  playlists: [], 
-  videos: [], 
-  newsletter: [], 
+  products: [],
+  playlists: [],
+  videos: [],
+  newsletter: [],
   orders: [],
   passwordResetTokens: [],
   profiles: [],
@@ -227,7 +227,7 @@ db.data.bot_config ||= {};
 if (db.data.team) {
   const oldLength = db.data.team.length;
   db.data.team = db.data.team.filter(t => t.role !== "Team Base");
-  
+
   db.data.team.forEach(t => {
     if (t.role === "Team Plus") {
       t.role = "Team Mattoncini";
@@ -897,7 +897,7 @@ async function compileFlowToCog(config, flow, options = {}) {
   const body = bodyFromNodes || `print("""Avvio comando ${effectiveCommand} avvenuto""")\nawait self._send_text(target, """${fallbackMessage}""")\n`;
   const commandBody = indentBlock(body, 8);
 
-    // Python helpers removed: non più usati nella generazione JS
+  // Python helpers removed: non più usati nella generazione JS
   // JavaScript (discord.js) module template
   const source = `const { SlashCommandBuilder } = require('discord.js');
 
@@ -947,7 +947,7 @@ app.post("/api/upload", upload.single("image"), (req, res) => {
 app.post("/api/check-nickname", async (req, res) => {
   try {
     const { nickname, userId } = req.body;
-    
+
     if (!nickname) {
       return res.status(400).json({ error: "Nickname non fornito" });
     }
@@ -959,8 +959,8 @@ app.post("/api/check-nickname", async (req, res) => {
     }
 
     // Cerca se il nickname esiste (escludendo l'utente attuale)
-    const exists = db.data.profiles.some(p => 
-      p.nickname.toLowerCase() === nickname.toLowerCase() && 
+    const exists = db.data.profiles.some(p =>
+      p.nickname.toLowerCase() === nickname.toLowerCase() &&
       p.user_id !== userId
     );
 
@@ -974,7 +974,7 @@ app.post("/api/check-nickname", async (req, res) => {
 app.post("/api/profile", async (req, res) => {
   try {
     const { user_id, nickname, email } = req.body;
-    
+
     if (!user_id || !nickname) {
       return res.status(400).json({ error: "Dati mancanti" });
     }
@@ -986,8 +986,8 @@ app.post("/api/profile", async (req, res) => {
     }
 
     // Controlla se il nickname è già in uso
-    const exists = db.data.profiles.some(p => 
-      p.nickname.toLowerCase() === nickname.toLowerCase() && 
+    const exists = db.data.profiles.some(p =>
+      p.nickname.toLowerCase() === nickname.toLowerCase() &&
       p.user_id !== user_id
     );
 
@@ -1027,7 +1027,7 @@ app.post("/api/profile", async (req, res) => {
 app.get("/api/profile/:userId", async (req, res) => {
   try {
     const { userId } = req.params;
-    
+
     if (!userId) {
       return res.status(400).json({ error: "User ID non fornito" });
     }
@@ -1056,7 +1056,7 @@ app.get("/api/profile/:userId", async (req, res) => {
 app.get("/api/team", async (req, res) => {
   try {
     await db.read();
-    
+
     // Initialize display_order for items that don't have it
     let needsUpdate = false;
     db.data.team.forEach((item, index) => {
@@ -1065,11 +1065,11 @@ app.get("/api/team", async (req, res) => {
         needsUpdate = true;
       }
     });
-    
+
     if (needsUpdate) {
       await db.write();
     }
-    
+
     const sorted = (db.data.team || []).sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
     // Convert relative image URLs to full URLs
     const withFullUrls = sorted.map(item => convertImageUrls(item, ['avatar']));
@@ -1150,7 +1150,7 @@ app.put("/api/team/:id", async (req, res) => {
 app.get("/api/staff", async (req, res) => {
   try {
     await db.read();
-    
+
     // Initialize display_order for items that don't have it
     let needsUpdate = false;
     db.data.staff.forEach((item, index) => {
@@ -1159,11 +1159,11 @@ app.get("/api/staff", async (req, res) => {
         needsUpdate = true;
       }
     });
-    
+
     if (needsUpdate) {
       await db.write();
     }
-    
+
     const sorted = (db.data.staff || []).sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
     // Convert relative image URLs to full URLs
     const withFullUrls = sorted.map(item => convertImageUrls(item, ['avatar']));
@@ -1243,7 +1243,7 @@ app.put("/api/staff/:id", async (req, res) => {
 app.get("/api/events", async (req, res) => {
   try {
     await db.read();
-    
+
     // Initialize display_order for items that don't have it
     let needsUpdate = false;
     (db.data.events || []).forEach((item, index) => {
@@ -1252,11 +1252,11 @@ app.get("/api/events", async (req, res) => {
         needsUpdate = true;
       }
     });
-    
+
     if (needsUpdate) {
       await db.write();
     }
-    
+
     const sorted = (db.data.events || []).sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
     // Convert relative image URLs to full URLs
     const withFullUrls = sorted.map(item => convertImageUrls(item, ['image']));
@@ -1340,7 +1340,7 @@ app.put("/api/events/:id", async (req, res) => {
 app.get("/api/events", async (req, res) => {
   try {
     await db.read();
-    
+
     // Initialize display_order for items that don't have it
     let needsUpdate = false;
     db.data.events.forEach((item, index) => {
@@ -1349,11 +1349,11 @@ app.get("/api/events", async (req, res) => {
         needsUpdate = true;
       }
     });
-    
+
     if (needsUpdate) {
       await db.write();
     }
-    
+
     const sorted = (db.data.events || []).sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
     // Convert relative image URLs to full URLs
     const withFullUrls = sorted.map(item => convertImageUrls(item, ['image']));
@@ -1436,7 +1436,7 @@ app.put("/api/events/:id", async (req, res) => {
 app.get("/api/schedule", async (req, res) => {
   try {
     await db.read();
-    
+
     // Initialize display_order for items that don't have it
     let needsUpdate = false;
     db.data.schedule.forEach((item, index) => {
@@ -1445,11 +1445,11 @@ app.get("/api/schedule", async (req, res) => {
         needsUpdate = true;
       }
     });
-    
+
     if (needsUpdate) {
       await db.write();
     }
-    
+
     const sorted = (db.data.schedule || []).sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
     res.json(sorted);
   } catch (err) {
@@ -1585,26 +1585,26 @@ app.put("/api/products/:id", async (req, res) => {
     if (index === -1) {
       return res.status(404).json({ error: "Product not found" });
     }
-    
+
     // Sanitizza i dati in arrivo
     const updatedData = { ...req.body };
     if (updatedData.price !== undefined) {
       updatedData.price = parseFloat(updatedData.price) || 0;
     }
     if (updatedData.stripe_price_id !== undefined) {
-      updatedData.stripe_price_id = (updatedData.stripe_price_id && updatedData.stripe_price_id.trim() !== '') 
-        ? updatedData.stripe_price_id.trim() 
+      updatedData.stripe_price_id = (updatedData.stripe_price_id && updatedData.stripe_price_id.trim() !== '')
+        ? updatedData.stripe_price_id.trim()
         : null;
     }
     if (updatedData.stripe_product_id !== undefined) {
-      updatedData.stripe_product_id = (updatedData.stripe_product_id && updatedData.stripe_product_id.trim() !== '') 
-        ? updatedData.stripe_product_id.trim() 
+      updatedData.stripe_product_id = (updatedData.stripe_product_id && updatedData.stripe_product_id.trim() !== '')
+        ? updatedData.stripe_product_id.trim()
         : null;
     }
     if (updatedData.free_shipping !== undefined) {
       updatedData.free_shipping = Boolean(updatedData.free_shipping);
     }
-    
+
     db.data.products[index] = { ...db.data.products[index], ...updatedData, id };
     await db.write();
     res.json(db.data.products[index]);
@@ -1631,12 +1631,12 @@ app.post("/api/shop-settings", async (req, res) => {
   try {
     await db.read();
     const { shipping_cost, free_shipping_threshold } = req.body;
-    
+
     db.data.shop_settings = {
       shipping_cost: parseFloat(shipping_cost) || 5.0,
       free_shipping_threshold: parseFloat(free_shipping_threshold) || 50.0
     };
-    
+
     await db.write();
     res.json(db.data.shop_settings);
   } catch (err) {
@@ -1652,10 +1652,10 @@ app.post("/api/create-checkout-session", async (req, res) => {
     const { items, customer_email } = req.body; // items = [{ id, quantity }], customer_email = user email
     console.log('[CHECKOUT] Items received:', JSON.stringify(items, null, 2));
     console.log('[CHECKOUT] Customer email:', customer_email);
-    
+
     await db.read();
     console.log('[CHECKOUT] Database products:', JSON.stringify(db.data.products, null, 2));
-    
+
     // Build line items for Stripe
     const lineItems = items.map((item) => {
       const product = db.data.products.find((p) => p.id === item.id);
@@ -1663,9 +1663,9 @@ app.post("/api/create-checkout-session", async (req, res) => {
         console.error(`[CHECKOUT] Product with id ${item.id} not found`);
         throw new Error(`Product with id ${item.id} not found`);
       }
-      
+
       console.log(`[CHECKOUT] Processing product:`, product);
-      
+
       // Costruisci il nome del prodotto con taglia e colore
       let productName = product.title;
       const variants = [];
@@ -1674,11 +1674,11 @@ app.post("/api/create-checkout-session", async (req, res) => {
       if (variants.length > 0) {
         productName += ` (${variants.join(', ')})`;
       }
-      
+
       // SEMPRE usa prezzi dinamici invece di Price ID per evitare errori con ID non validi
       const priceAmount = typeof product.price === 'number' ? product.price : parseFloat(product.price) || 0;
       console.log(`[CHECKOUT] Creating dynamic price: €${priceAmount} (${Math.round(priceAmount * 100)} cents)`);
-      
+
       return {
         price_data: {
           currency: "eur",
@@ -1699,7 +1699,7 @@ app.post("/api/create-checkout-session", async (req, res) => {
       shipping_cost: 5.0,
       free_shipping_threshold: 50.0
     };
-    
+
     console.log('[CHECKOUT] Shop settings:', shopSettings);
 
     // Calculate if shipping is free
@@ -1717,12 +1717,12 @@ app.post("/api/create-checkout-session", async (req, res) => {
       const product = db.data.products.find((p) => p.id === item.id);
       return product && product.free_shipping === true;
     });
-    
+
     console.log(`[CHECKOUT] Has free shipping product: ${hasFreeShippingProduct}`);
 
     // Add shipping if needed (se threshold è 0, la spedizione è sempre a pagamento)
     const needsShipping = shopSettings.free_shipping_threshold === 0 || subtotal < shopSettings.free_shipping_threshold;
-    
+
     if (needsShipping && shopSettings.shipping_cost > 0 && !hasFreeShippingProduct) {
       console.log(`[CHECKOUT] Adding shipping €${shopSettings.shipping_cost} (threshold: €${shopSettings.free_shipping_threshold})`);
       lineItems.push({
@@ -1775,13 +1775,13 @@ app.post("/api/create-checkout-session", async (req, res) => {
           })),
         },
       };
-      
+
       // Prefilla l'email se l'utente è loggato
       if (customer_email) {
         sessionConfig.customer_email = customer_email;
         console.log('[CHECKOUT] Prefilling customer email:', customer_email);
       }
-      
+
       const session = await stripe.checkout.sessions.create(sessionConfig);
 
       console.log('[CHECKOUT] Stripe session created:', session.id);
@@ -1790,12 +1790,12 @@ app.post("/api/create-checkout-session", async (req, res) => {
       // Se l'errore è dovuto a un price recurring, riprova senza usare il Price ID
       if (stripeError.message && stripeError.message.includes('recurring price')) {
         console.log('[CHECKOUT] Detected recurring price, retrying without Stripe Price IDs...');
-        
+
         // Ricrea line items senza usare Stripe Price IDs
         const dynamicLineItems = items.map((item) => {
           const product = db.data.products.find((p) => p.id === item.id);
           const priceAmount = typeof product.price === 'number' ? product.price : parseFloat(product.price) || 0;
-          
+
           // Costruisci il nome del prodotto con taglia e colore
           let productName = product.title;
           const variants = [];
@@ -1804,7 +1804,7 @@ app.post("/api/create-checkout-session", async (req, res) => {
           if (variants.length > 0) {
             productName += ` (${variants.join(', ')})`;
           }
-          
+
           return {
             price_data: {
               currency: "eur",
@@ -1817,7 +1817,7 @@ app.post("/api/create-checkout-session", async (req, res) => {
             quantity: item.quantity,
           };
         });
-        
+
         // Riaggiungi spedizione se necessario
         const subtotal = items.reduce((sum, item) => {
           const product = db.data.products.find((p) => p.id === item.id);
@@ -1825,9 +1825,9 @@ app.post("/api/create-checkout-session", async (req, res) => {
           const priceAmount = typeof product.price === 'number' ? product.price : parseFloat(product.price) || 0;
           return sum + (priceAmount * item.quantity);
         }, 0);
-        
+
         const needsShipping = shopSettings.free_shipping_threshold === 0 || subtotal < shopSettings.free_shipping_threshold;
-        
+
         if (needsShipping && shopSettings.shipping_cost > 0) {
           dynamicLineItems.push({
             price_data: {
@@ -1838,9 +1838,9 @@ app.post("/api/create-checkout-session", async (req, res) => {
             quantity: 1,
           });
         }
-        
+
         console.log('[CHECKOUT] Retrying with dynamic prices:', JSON.stringify(dynamicLineItems, null, 2));
-        
+
         const retryConfig = {
           payment_method_types: ["card"],
           line_items: dynamicLineItems,
@@ -1868,18 +1868,18 @@ app.post("/api/create-checkout-session", async (req, res) => {
             })),
           },
         };
-        
+
         // Prefilla l'email anche nel retry
         if (customer_email) {
           retryConfig.customer_email = customer_email;
         }
-        
+
         const retrySession = await stripe.checkout.sessions.create(retryConfig);
-        
+
         console.log('[CHECKOUT] Retry successful:', retrySession.id);
         return res.json({ sessionId: retrySession.id, url: retrySession.url });
       }
-      
+
       // Se è un altro tipo di errore, rilancia
       throw stripeError;
     }
@@ -1911,10 +1911,10 @@ app.post("/api/webhook/stripe", express.raw({ type: 'application/json' }), async
   // Handle the event
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
-    
+
     try {
       await db.read();
-      
+
       // Get product details for the items
       const items = JSON.parse(session.metadata.items || '[]');
       const itemsWithProducts = items.map(item => {
@@ -1924,13 +1924,13 @@ app.post("/api/webhook/stripe", express.raw({ type: 'application/json' }), async
           product: product || { title: 'Prodotto', price: 0 }
         };
       });
-      
+
       // Calculate shipping
       const subtotal = itemsWithProducts.reduce((sum, item) => {
         return sum + (item.product.price * item.quantity);
       }, 0);
       const shipping = subtotal < 50 ? 0 : 0;
-      
+
       // Create order record
       const order = {
         id: Date.now(),
@@ -1949,12 +1949,12 @@ app.post("/api/webhook/stripe", express.raw({ type: 'application/json' }), async
         shipping_name: session.shipping_details?.name,
         created_at: new Date().toISOString(),
       };
-      
+
       db.data.orders.push(order);
       await db.write();
-      
+
       console.log("Order created:", order.id);
-      
+
       // Send order receipt email to customer
       if (session.customer_details?.email) {
         try {
@@ -1969,7 +1969,7 @@ app.post("/api/webhook/stripe", express.raw({ type: 'application/json' }), async
           console.error("Error sending receipt email:", emailError);
         }
       }
-      
+
       // Send notification email to admin
       const adminEmail = process.env.ADMIN_EMAIL || process.env.GMAIL_USER;
       if (adminEmail) {
@@ -2008,15 +2008,15 @@ app.get("/api/user-orders", async (req, res) => {
   try {
     const { email } = req.query;
     console.log('[USER-ORDERS] Request for email:', email);
-    
+
     if (!email) {
       console.error('[USER-ORDERS] No email provided');
       return res.status(400).json({ error: "Email is required" });
     }
-    
+
     await db.read();
     console.log('[USER-ORDERS] Total orders in database:', db.data.orders?.length || 0);
-    
+
     // Debug: mostra tutte le email presenti negli ordini
     if (db.data.orders && db.data.orders.length > 0) {
       console.log('[USER-ORDERS] All customer emails in database:');
@@ -2024,16 +2024,16 @@ app.get("/api/user-orders", async (req, res) => {
         console.log(`  [${idx}] Order #${order.id}: email="${order.customer_email}", name="${order.customer_name}"`);
       });
     }
-    
+
     const userOrders = (db.data.orders || []).filter(
       (order) => order.customer_email === email
     );
-    
+
     console.log('[USER-ORDERS] Found', userOrders.length, 'orders for email:', email);
-    
+
     // Ordina per data (più recenti prima)
     userOrders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    
+
     res.json(userOrders);
   } catch (err) {
     console.error('[USER-ORDERS] Error:', err);
@@ -2062,12 +2062,12 @@ app.put("/api/orders/:id/status", async (req, res) => {
     await db.read();
     const id = parseInt(req.params.id);
     const { order_status, tracking_number } = req.body;
-    
+
     const orderIndex = db.data.orders.findIndex((o) => o.id === id);
     if (orderIndex === -1) {
       return res.status(404).json({ error: "Order not found" });
     }
-    
+
     // Update order
     db.data.orders[orderIndex] = {
       ...db.data.orders[orderIndex],
@@ -2075,11 +2075,11 @@ app.put("/api/orders/:id/status", async (req, res) => {
       tracking_number: tracking_number !== undefined ? tracking_number : db.data.orders[orderIndex].tracking_number,
       updated_at: new Date().toISOString(),
     };
-    
+
     await db.write();
-    
+
     console.log(`[ORDER-STATUS] Updated order #${id} to status: ${order_status}`);
-    
+
     res.json(db.data.orders[orderIndex]);
   } catch (err) {
     console.error('[ORDER-STATUS] Error:', err);
@@ -2092,20 +2092,20 @@ app.post("/api/orders/:id/notify", async (req, res) => {
   try {
     await db.read();
     const id = parseInt(req.params.id);
-    
+
     const order = db.data.orders.find((o) => o.id === id);
     if (!order) {
       return res.status(404).json({ error: "Order not found" });
     }
-    
+
     if (!order.customer_email) {
       return res.status(400).json({ error: "Order has no customer email" });
     }
-    
+
     console.log(`[ORDER-NOTIFY] Sending notification for order #${id} to ${order.customer_email}`);
     console.log(`[ORDER-NOTIFY] Current status: ${order.order_status || 'new'}`);
     console.log(`[ORDER-NOTIFY] Tracking number: ${order.tracking_number || 'N/A'}`);
-    
+
     // Send notification email
     try {
       await transporter.sendMail({
@@ -2114,7 +2114,7 @@ app.post("/api/orders/:id/notify", async (req, res) => {
         subject: `Aggiornamento Ordine #${order.id} - LegoChris`,
         html: orderStatusUpdateEmail(order),
       });
-      
+
       console.log(`[ORDER-NOTIFY] ✅ Notification email sent to: ${order.customer_email}`);
       res.json({ success: true, message: "Notification sent" });
     } catch (emailError) {
@@ -2133,22 +2133,22 @@ app.get("/api/checkout-session/:sessionId", async (req, res) => {
     if (!ensureStripeConfigured(res)) return;
     const sessionId = req.params.sessionId;
     console.log('[CHECKOUT-SESSION] Retrieving session:', sessionId);
-    
+
     // Verifica compatibilità session ID e chiave API
     const isLiveSession = sessionId.startsWith('cs_live_');
     const isTestSession = sessionId.startsWith('cs_test_');
     const apiKeyMode = process.env.STRIPE_SECRET_KEY?.startsWith('sk_live_') ? 'live' : 'test';
-    
+
     console.log('[CHECKOUT-SESSION] Session type:', isLiveSession ? 'LIVE' : (isTestSession ? 'TEST' : 'UNKNOWN'));
     console.log('[CHECKOUT-SESSION] API key mode:', apiKeyMode);
-    
+
     if ((isLiveSession && apiKeyMode === 'test') || (isTestSession && apiKeyMode === 'live')) {
       console.error('[CHECKOUT-SESSION] ❌ MISMATCH: Session type does not match API key mode');
-      return res.status(400).json({ 
-        error: `Session type (${isLiveSession ? 'live' : 'test'}) does not match API key mode (${apiKeyMode})` 
+      return res.status(400).json({
+        error: `Session type (${isLiveSession ? 'live' : 'test'}) does not match API key mode (${apiKeyMode})`
       });
     }
-    
+
     const session = await stripe.checkout.sessions.retrieve(sessionId, {
       expand: ['line_items', 'customer_details']
     });
@@ -2167,9 +2167,9 @@ app.post("/api/save-order", async (req, res) => {
   try {
     if (!ensureStripeConfigured(res)) return;
     const { sessionId } = req.body;
-    
+
     console.log('[SAVE-ORDER] Request received for session:', sessionId);
-    
+
     if (!sessionId) {
       console.error('[SAVE-ORDER] No session ID provided');
       return res.status(400).json({ error: "Session ID is required" });
@@ -2181,44 +2181,44 @@ app.post("/api/save-order", async (req, res) => {
     const existingOrder = db.data.orders.find(
       order => order.stripe_session_id === sessionId
     );
-    
+
     if (existingOrder) {
       console.log('[SAVE-ORDER] Order already exists:', existingOrder.id);
-      return res.json({ 
-        success: true, 
-        message: "Order already exists", 
-        order: existingOrder 
+      return res.json({
+        success: true,
+        message: "Order already exists",
+        order: existingOrder
       });
     }
 
     console.log('[SAVE-ORDER] Retrieving session from Stripe...');
     // Recupera la sessione da Stripe con i dettagli completi
-    
+
     // Verifica compatibilità session ID e chiave API
     const isLiveSession = sessionId.startsWith('cs_live_');
     const isTestSession = sessionId.startsWith('cs_test_');
     const apiKeyMode = process.env.STRIPE_SECRET_KEY?.startsWith('sk_live_') ? 'live' : 'test';
-    
+
     console.log('[SAVE-ORDER] Session type:', isLiveSession ? 'LIVE' : (isTestSession ? 'TEST' : 'UNKNOWN'));
     console.log('[SAVE-ORDER] API key mode:', apiKeyMode);
-    
+
     if ((isLiveSession && apiKeyMode === 'test') || (isTestSession && apiKeyMode === 'live')) {
       console.error('[SAVE-ORDER] ❌ MISMATCH: Session type does not match API key mode');
-      return res.status(400).json({ 
-        error: `Session type (${isLiveSession ? 'live' : 'test'}) does not match API key mode (${apiKeyMode})` 
+      return res.status(400).json({
+        error: `Session type (${isLiveSession ? 'live' : 'test'}) does not match API key mode (${apiKeyMode})`
       });
     }
-    
+
     const session = await stripe.checkout.sessions.retrieve(sessionId, {
       expand: ['line_items', 'customer_details']
     });
-    
+
     console.log('[SAVE-ORDER] Session retrieved. Payment status:', session.payment_status);
     console.log('[SAVE-ORDER] Customer email:', session.customer_details?.email);
     console.log('[SAVE-ORDER] Customer name:', session.customer_details?.name);
     console.log('[SAVE-ORDER] Amount total:', session.amount_total);
     console.log('[SAVE-ORDER] Full session object:', JSON.stringify(session, null, 2));
-    
+
     if (session.payment_status !== 'paid') {
       console.warn('[SAVE-ORDER] Payment not completed:', session.payment_status);
       return res.status(400).json({ error: "Payment not completed" });
@@ -2233,13 +2233,13 @@ app.post("/api/save-order", async (req, res) => {
         product: product || { title: 'Prodotto', price: 0 }
       };
     });
-    
+
     // Calculate shipping
     const subtotal = itemsWithProducts.reduce((sum, item) => {
       return sum + (item.product.price * item.quantity);
     }, 0);
     const shipping = subtotal < 50 ? 0 : 0;
-    
+
     // Create order record
     const order = {
       id: Date.now(),
@@ -2258,10 +2258,10 @@ app.post("/api/save-order", async (req, res) => {
       shipping_name: session.shipping_details?.name,
       created_at: new Date().toISOString(),
     };
-    
+
     db.data.orders.push(order);
     await db.write();
-    
+
     console.log("[SAVE-ORDER] ✅ Order saved successfully:");
     console.log("[SAVE-ORDER]   Order ID:", order.id);
     console.log("[SAVE-ORDER]   Customer Email:", order.customer_email);
@@ -2269,7 +2269,7 @@ app.post("/api/save-order", async (req, res) => {
     console.log("[SAVE-ORDER]   Amount:", order.amount, order.currency);
     console.log("[SAVE-ORDER]   Items:", order.items.length);
     console.log("[SAVE-ORDER]   Full order object:", JSON.stringify(order, null, 2));
-    
+
     // Send order receipt email to customer
     if (session.customer_details?.email) {
       try {
@@ -2284,7 +2284,7 @@ app.post("/api/save-order", async (req, res) => {
         console.error("[SAVE-ORDER] Error sending receipt email:", emailError);
       }
     }
-    
+
     // Send notification email to admin
     const adminEmail = process.env.ADMIN_EMAIL || process.env.GMAIL_USER;
     if (adminEmail) {
@@ -2300,7 +2300,7 @@ app.post("/api/save-order", async (req, res) => {
         console.error("[SAVE-ORDER] [ADMIN-NOTIFY] Error sending admin notification:", emailError);
       }
     }
-    
+
     res.json({ success: true, order });
   } catch (err) {
     console.error("Error saving order:", err);
@@ -2310,8 +2310,8 @@ app.post("/api/save-order", async (req, res) => {
 
 // Get Stripe publishable key
 app.get("/api/config/stripe", (req, res) => {
-  res.json({ 
-    publishableKey: process.env.STRIPE_PUBLISHABLE_KEY 
+  res.json({
+    publishableKey: process.env.STRIPE_PUBLISHABLE_KEY
   });
 });
 
@@ -2319,7 +2319,7 @@ app.get("/api/config/stripe", (req, res) => {
 app.post("/api/send-welcome-email", async (req, res) => {
   try {
     const { email, name } = req.body;
-    
+
     if (!email) {
       return res.status(400).json({ error: "Email is required" });
     }
@@ -2343,7 +2343,7 @@ app.post("/api/send-welcome-email", async (req, res) => {
 app.post("/api/password-reset/request", async (req, res) => {
   try {
     const { email } = req.body;
-    
+
     if (!email) {
       return res.status(400).json({ error: "Email is required" });
     }
@@ -2381,9 +2381,9 @@ app.post("/api/password-reset/request", async (req, res) => {
     });
 
     console.log(`✅ Password reset email sent to: ${email}`);
-    res.json({ 
-      success: true, 
-      message: "If an account exists with this email, you will receive a password reset link shortly." 
+    res.json({
+      success: true,
+      message: "If an account exists with this email, you will receive a password reset link shortly."
     });
   } catch (err) {
     console.error("Error requesting password reset:", err);
@@ -2395,7 +2395,7 @@ app.post("/api/password-reset/request", async (req, res) => {
 app.post("/api/password-reset/verify", async (req, res) => {
   try {
     const { token } = req.body;
-    
+
     if (!token) {
       return res.status(400).json({ error: "Token is required" });
     }
@@ -2410,10 +2410,10 @@ app.post("/api/password-reset/verify", async (req, res) => {
       return res.status(400).json({ error: "Invalid or expired token" });
     }
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       email: resetToken.email,
-      message: "Token is valid" 
+      message: "Token is valid"
     });
   } catch (err) {
     console.error("Error verifying reset token:", err);
@@ -2425,7 +2425,7 @@ app.post("/api/password-reset/verify", async (req, res) => {
 app.post("/api/password-reset/complete", async (req, res) => {
   try {
     const { token } = req.body;
-    
+
     if (!token) {
       return res.status(400).json({ error: "Token is required" });
     }
@@ -2653,10 +2653,22 @@ app.put("/api/videos/reorder", async (req, res) => {
 app.get("/api/newsletter", async (req, res) => {
   try {
     await db.read();
-    const sorted = (db.data.newsletter || []).sort((a, b) => 
+    const sorted = (db.data.newsletter || []).sort((a, b) =>
       new Date(b.subscribed_at) - new Date(a.subscribed_at)
     );
     res.json(sorted);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/newsletter/check", async (req, res) => {
+  try {
+    await db.read();
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "Email is required" });
+    const isSubscribed = (db.data.newsletter || []).some(s => s.email === email);
+    res.json({ subscribed: isSubscribed });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -2666,20 +2678,20 @@ app.post("/api/newsletter", async (req, res) => {
   try {
     await db.read();
     const { email, name } = req.body;
-    
+
     // Check if already subscribed
     const existing = db.data.newsletter.find(s => s.email === email);
     if (existing) {
       return res.status(400).json({ error: "Email già iscritto" });
     }
-    
+
     const newSubscriber = {
       id: Date.now(),
       email,
       name: name || "",
       subscribed_at: new Date().toISOString(),
     };
-    
+
     db.data.newsletter.push(newSubscriber);
     await db.write();
     res.json(newSubscriber);
@@ -2705,16 +2717,16 @@ app.post("/api/newsletter/send", async (req, res) => {
     await db.read();
     const { subject, message } = req.body;
     const subscribers = db.data.newsletter || [];
-    
+
     if (subscribers.length === 0) {
-      return res.status(400).json({ 
-        error: "Nessun iscritto alla newsletter" 
+      return res.status(400).json({
+        error: "Nessun iscritto alla newsletter"
       });
     }
 
     console.log(`\n📧 Invio newsletter a ${subscribers.length} iscritti`);
     console.log(`Subject: ${subject}`);
-    
+
     let sentCount = 0;
     let failedCount = 0;
     const errors = [];
@@ -2728,7 +2740,7 @@ app.post("/api/newsletter/send", async (req, res) => {
           subject: subject,
           html: newsletterEmail(subscriber.name, message),
         });
-        
+
         sentCount++;
         console.log(`✅ Email inviata a: ${subscriber.email}`);
       } catch (error) {
@@ -2739,9 +2751,9 @@ app.post("/api/newsletter/send", async (req, res) => {
     }
 
     console.log(`\n📊 Risultato: ${sentCount} inviate, ${failedCount} fallite`);
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       sent: sentCount,
       failed: failedCount,
       total: subscribers.length,
@@ -2894,14 +2906,14 @@ app.post("/api/bot/terminal/session", async (req, res) => {
     const cwdRelative = String(req.body?.cwd || ".");
     const cols = Number(req.body?.cols || 120);
     const rows = Number(req.body?.rows || 32);
-    
+
     console.log("[API] POST /api/bot/terminal/session: creating new session, cwd:", cwdRelative, "cols:", cols, "rows:", rows);
-    
+
     const session = createTerminalSession(config, cwdRelative, cols, rows);
 
     pushBotLog("info", `Terminal session opened: ${session.id}`);
     console.log("[API] POST /api/bot/terminal/session: session created successfully, id:", session.id);
-    
+
     res.json({
       id: session.id,
       cwd: session.cwdRelative,
@@ -2918,7 +2930,7 @@ app.post("/api/bot/terminal/session", async (req, res) => {
 app.get("/api/bot/terminal/session/:id/stream", (req, res) => {
   const sessionId = String(req.params.id || "");
   console.log("[API] GET /api/bot/terminal/session/:id/stream, sessionId:", sessionId);
-  
+
   const session = botTerminalSessions.get(sessionId);
   if (!session) {
     console.error("[API] Session not found:", sessionId);
@@ -2926,7 +2938,7 @@ app.get("/api/bot/terminal/session/:id/stream", (req, res) => {
   }
 
   console.log("[API] Session found, setting up SSE headers");
-  
+
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
@@ -3280,7 +3292,7 @@ app.post("/api/bot/builder/compile", async (req, res) => {
     });
     let restarted = false;
     let restartError = null;
-    
+
     // Se preview=true, non salvare il file fisicamente, solo visualizzare l'anteprima
     if (!preview) {
       const flowRecord = {

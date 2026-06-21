@@ -33,6 +33,7 @@ export const API_ENDPOINTS = {
   events: `${API_URL}/api/events`,
   schedule: `${API_URL}/api/schedule`,
   newsletter: `${API_URL}/api/newsletter`,
+  newsletterCheck: `${API_URL}/api/newsletter/check`,
   upload: `${API_URL}/api/upload`,
   userOrders: `${API_URL}/api/user-orders`,
   createCheckoutSession: `${API_URL}/api/create-checkout-session`,

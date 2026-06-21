@@ -25,6 +25,7 @@ const Profile = () => {
   const [initialNickname, setInitialNickname] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
   const [newsletter, setNewsletter] = useState(false);
+  const [isAlreadySubscribed, setIsAlreadySubscribed] = useState(false);
   const [nicknameError, setNicknameError] = useState("");
   const [isCheckingNickname, setIsCheckingNickname] = useState(false);
 
@@ -64,8 +65,21 @@ const Profile = () => {
       setNickname(finalNickname);
       setAvatarUrl(user.user_metadata?.custom_avatar_url || avatarFromProvider);
       
-      // Controlla se iscritto alla newsletter (qui potresti fare una chiamata API)
+      // Controlla se iscritto alla newsletter
       setNewsletter(false);
+      try {
+        const subResponse = await fetch(API_ENDPOINTS.newsletterCheck, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: user.email }),
+        });
+        if (subResponse.ok) {
+          const subData = await subResponse.json();
+          setIsAlreadySubscribed(subData.subscribed);
+        }
+      } catch (err) {
+        console.error('Error checking newsletter subscription', err);
+      }
     };
 
     loadProfileData();
@@ -233,7 +247,7 @@ const Profile = () => {
       }
       
       // Se newsletter è cambiato, aggiorna la subscription
-      if (newsletter && user) {
+      if (newsletter && user && !isAlreadySubscribed) {
         await fetch(API_ENDPOINTS.newsletter, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -242,6 +256,7 @@ const Profile = () => {
             name: nickname.trim(),
           }),
         });
+        setIsAlreadySubscribed(true);
       }
 
       toast({
@@ -371,22 +386,24 @@ const Profile = () => {
                   </div>
 
                   {/* Newsletter */}
-                  <div className="flex items-start gap-3 p-4 rounded-lg bg-secondary/50 border border-border">
-                    <Checkbox
-                      id="newsletter"
-                      checked={newsletter}
-                      onCheckedChange={(checked) => setNewsletter(checked as boolean)}
-                      className="mt-1"
-                    />
-                    <div className="flex-1">
-                      <Label htmlFor="newsletter" className="cursor-pointer font-medium">
-                        Iscriviti alla Newsletter
-                      </Label>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Ricevi aggiornamenti su nuovi video, eventi esclusivi e offerte speciali
-                      </p>
+                  {!isAlreadySubscribed && (
+                    <div className="flex items-start gap-3 p-4 rounded-lg bg-secondary/50 border border-border">
+                      <Checkbox
+                        id="newsletter"
+                        checked={newsletter}
+                        onCheckedChange={(checked) => setNewsletter(checked as boolean)}
+                        className="mt-1"
+                      />
+                      <div className="flex-1">
+                        <Label htmlFor="newsletter" className="cursor-pointer font-medium">
+                          Iscriviti alla Newsletter
+                        </Label>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Ricevi aggiornamenti su nuovi video, eventi esclusivi e offerte speciali
+                        </p>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Save Button */}
                   <Button

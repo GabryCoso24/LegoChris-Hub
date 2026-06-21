@@ -274,12 +274,15 @@ export default function StaffManager() {
                 <SelectValue placeholder="Seleziona ruolo" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="Owner">Owner</SelectItem>
+                <SelectItem value="Co-Owner">Co-Owner</SelectItem>
+                <SelectItem value="Manager">Manager</SelectItem>
+                <SelectItem value="Sr. Admin">Sr. Admin</SelectItem>
                 <SelectItem value="Admin">Admin</SelectItem>
-                <SelectItem value="Moderator">Moderator</SelectItem>
-                <SelectItem value="Developer">Developer</SelectItem>
-                <SelectItem value="Support">Support</SelectItem>
-                <SelectItem value="Content Creator">Content Creator</SelectItem>
-                <SelectItem value="Community Manager">Community Manager</SelectItem>
+                <SelectItem value="Sr. Mod">Sr. Mod</SelectItem>
+                <SelectItem value="Mod">Mod</SelectItem>
+                <SelectItem value="Helper">Helper</SelectItem>
+                <SelectItem value="Twitch Mod">Twitch Mod</SelectItem>
               </SelectContent>
             </Select>
             <input

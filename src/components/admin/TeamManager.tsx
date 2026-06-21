@@ -8,7 +8,7 @@ type Team = { id?: number; name: string; role: string; description: string | nul
 
 export default function TeamManager() {
   const [items, setItems] = useState<Team[]>([]);
-  const [form, setForm] = useState<Team>({ name: "", role: "", description: null, avatar: null });
+  const [form, setForm] = useState<Team>({ name: "", role: "Team Mattoncini", description: null, avatar: null });
   const [uploading, setUploading] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -58,10 +58,10 @@ export default function TeamManager() {
       });
       const data = await res.json();
       setItems((s) => [...s, data]);
-      setForm({ name: "", role: "", description: null, avatar: null });
+      setForm({ name: "", role: "Team Mattoncini", description: null, avatar: null });
     } catch (e) {
       setItems((s) => [...s, { ...form, id: Date.now() }]);
-      setForm({ name: "", role: "", description: null, avatar: null });
+      setForm({ name: "", role: "Team Mattoncini", description: null, avatar: null });
     }
   };
 
@@ -85,7 +85,7 @@ export default function TeamManager() {
       const data = await res.json();
       setItems((s) => s.map((it) => (it.id === id ? data : it)));
       setEditingId(null);
-      setForm({ name: "", role: "", description: null, avatar: null });
+      setForm({ name: "", role: "Team Mattoncini", description: null, avatar: null });
     } catch (e) {
       console.error("Update failed", e);
     }
@@ -98,7 +98,7 @@ export default function TeamManager() {
 
   const cancelEdit = () => {
     setEditingId(null);
-    setForm({ name: "", role: "", description: null, avatar: null });
+    setForm({ name: "", role: "Team Mattoncini", description: null, avatar: null });
   };
 
   const saveEdit = () => {
@@ -263,17 +263,7 @@ export default function TeamManager() {
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             />
-            <Select
-              value={form.role}
-              onValueChange={(value) => setForm((f) => ({ ...f, role: value }))}
-            >
-              <SelectTrigger className="h-[50px] px-4 py-3 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary">
-                <SelectValue placeholder="Seleziona ruolo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Team Mattoncini">Team Mattoncini</SelectItem>
-              </SelectContent>
-            </Select>
+
             <input
               className="px-4 py-3 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary"
               placeholder="Descrizione"
@@ -306,7 +296,7 @@ export default function TeamManager() {
                 <button
                   className="flex items-center gap-2 px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ml-auto"
                   onClick={saveEdit}
-                  disabled={uploading || !form.name || !form.role}
+                  disabled={uploading || !form.name}
                 >
                   <Save className="w-4 h-4" />
                   Salva Modifiche
@@ -323,10 +313,10 @@ export default function TeamManager() {
               <button
                 className="flex items-center gap-2 px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ml-auto"
                 onClick={add}
-                disabled={uploading || !form.name || !form.role}
+                disabled={uploading || !form.name}
               >
                 <Plus className="w-4 h-4" />
-                Aggiungi Team
+                Aggiungi Persona
               </button>
             )}
           </div>
@@ -354,9 +344,8 @@ export default function TeamManager() {
                   setDraggedIndex(null);
                   setDropTargetIndex(null);
                 }}
-                className={`reorder-item flex items-center justify-between bg-background/50 hover:bg-background/80 p-4 rounded-lg border border-border transition-colors group ${
-                  draggedIndex === index && dropTargetIndex !== null ? "reorder-item-ghost" : ""
-                } ${isReordering ? "cursor-move" : ""}`}
+                className={`reorder-item flex items-center justify-between bg-background/50 hover:bg-background/80 p-4 rounded-lg border border-border transition-colors group ${draggedIndex === index && dropTargetIndex !== null ? "reorder-item-ghost" : ""
+                  } ${isReordering ? "cursor-move" : ""}`}
               >
                 <div className="flex items-center gap-4 flex-1">
                   {isReordering && (
