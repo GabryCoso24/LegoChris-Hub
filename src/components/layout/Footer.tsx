@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Youtube, Instagram } from "lucide-react";
+import { Youtube, Instagram, Twitch } from "lucide-react";
 import LogoSVG from "@/assets/logo-MT-team-sticker.svg";
 import { OptimizedImage } from "@/components/ui/OptimizedImage";
 
@@ -35,6 +35,7 @@ const socialLinks = [
   { icon: Youtube, href: "https://youtube.com/@lego-chris", label: "YouTube" },
   { icon: TikTokIcon, href: "https://www.tiktok.com/@lego_chris06", label: "TikTok" },
   { icon: Instagram, href: "https://www.instagram.com/legochris_official?igsh=MTltb3gwMGkwdjY1eA==", label: "Instagram" },
+  { icon: Twitch, href: "https://www.twitch.tv/legochristv", label: "Twitch" },
 ];
 
 export function Footer() {

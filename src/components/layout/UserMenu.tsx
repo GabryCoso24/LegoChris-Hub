@@ -1,7 +1,6 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAdmin } from "@/hooks/use-admin";
-import { useTeamPlus } from "@/hooks/use-team-plus";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -19,7 +18,6 @@ import { API_ENDPOINTS } from "@/lib/api";
 export const UserMenu = () => {
   const { user, signOut } = useAuth();
   const { isAdmin } = useAdmin();
-  const { isTeamPlus } = useTeamPlus();
   const { toast } = useToast();
   const [displayName, setDisplayName] = useState("");
 
@@ -122,24 +120,16 @@ export const UserMenu = () => {
             I Miei Acquisti
           </Link>
         </DropdownMenuItem>
-        {(isTeamPlus || isAdmin) && (
-          <DropdownMenuSeparator className="bg-border" />
-        )}
-        {isTeamPlus && (
-          <DropdownMenuItem asChild>
-            <Link to="/team-plus" className="cursor-pointer flex items-center gap-2 text-primary">
-              <Calendar className="h-4 w-4" />
-              Team Plus
-            </Link>
-          </DropdownMenuItem>
-        )}
         {isAdmin && (
-          <DropdownMenuItem asChild>
-            <Link to="/admin" className="cursor-pointer flex items-center gap-2 text-primary">
-              <Shield className="h-4 w-4" />
-              Admin Panel
-            </Link>
-          </DropdownMenuItem>
+          <>
+            <DropdownMenuSeparator className="bg-border" />
+            <DropdownMenuItem asChild>
+              <Link to="/admin" className="cursor-pointer flex items-center gap-2 text-primary">
+                <Shield className="h-4 w-4" />
+                Admin Panel
+              </Link>
+            </DropdownMenuItem>
+          </>
         )}
         <DropdownMenuSeparator className="bg-border" />
         <DropdownMenuItem onClick={handleLogout} className="cursor-pointer flex items-center gap-2 text-destructive focus:text-black hover:text-black">

@@ -7,7 +7,6 @@ import { UserMenu } from "./UserMenu";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCart } from "@/contexts/CartContext";
 import { useAdmin } from "@/hooks/use-admin";
-import { useTeamPlus } from "@/hooks/use-team-plus";
 import { useToast } from "@/hooks/use-toast";
 import LogoSVG from "@/assets/logo-MT-team-sticker.svg";
 import { OptimizedImage } from "@/components/ui/OptimizedImage";
@@ -28,7 +27,6 @@ export function Navbar() {
   const { user, loading, signOut } = useAuth();
   const { itemCount } = useCart();
   const { isAdmin } = useAdmin();
-  const { isTeamPlus } = useTeamPlus();
   const { toast } = useToast();
 
   const handleLogout = async () => {
@@ -222,28 +220,16 @@ export function Navbar() {
                     </div>
 
                     {/* Sezione Pannelli Speciali */}
-                    {(isTeamPlus || isAdmin) && (
+                    {isAdmin && (
                       <div className="space-y-0.5 pt-2 border-t border-border">
-                        {isTeamPlus && (
-                          <Link
-                            to="/team-plus"
-                            onClick={() => setIsOpen(false)}
-                            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-sm"
-                          >
-                            <Calendar className="h-4 w-4" />
-                            Team Plus
-                          </Link>
-                        )}
-                        {isAdmin && (
-                          <Link
-                            to="/admin"
-                            onClick={() => setIsOpen(false)}
-                            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-sm"
-                          >
-                            <Shield className="h-4 w-4" />
-                            Admin Panel
-                          </Link>
-                        )}
+                        <Link
+                          to="/admin"
+                          onClick={() => setIsOpen(false)}
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors text-sm"
+                        >
+                          <Shield className="h-4 w-4" />
+                          Admin Panel
+                        </Link>
                       </div>
                     )}
 

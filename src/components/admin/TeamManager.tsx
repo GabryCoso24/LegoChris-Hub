@@ -271,8 +271,7 @@ export default function TeamManager() {
                 <SelectValue placeholder="Seleziona ruolo" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Team Base">Team Base</SelectItem>
-                <SelectItem value="Team Plus">Team Plus</SelectItem>
+                <SelectItem value="Team Mattoncini">Team Mattoncini</SelectItem>
               </SelectContent>
             </Select>
             <input

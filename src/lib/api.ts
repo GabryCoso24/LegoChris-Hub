@@ -32,7 +32,6 @@ export const API_ENDPOINTS = {
   staff: `${API_URL}/api/staff`,
   events: `${API_URL}/api/events`,
   schedule: `${API_URL}/api/schedule`,
-  teamPlusSchedule: `${API_URL}/api/team-plus-schedule`,
   newsletter: `${API_URL}/api/newsletter`,
   upload: `${API_URL}/api/upload`,
   userOrders: `${API_URL}/api/user-orders`,

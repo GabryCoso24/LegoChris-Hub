@@ -22,19 +22,7 @@ interface ScheduleItem {
   display_order: number;
 }
 
-interface TeamPlusScheduleItem {
-  id: number;
-  user_id: string;
-  user_name: string;
-  title: string;
-  type: 'video' | 'live';
-  day_of_week: number;
-  time: string;
-  description: string;
-  link: string;
-  thumbnail?: string | null;
-  display_order: number;
-}
+
 
 const DAYS_OF_WEEK = [
   { value: 1, label: 'Lunedì', short: 'LUN' },
@@ -48,7 +36,7 @@ const DAYS_OF_WEEK = [
 
 export default function Schedule() {
   const [scheduleItems, setScheduleItems] = useState<ScheduleItem[]>([]);
-  const [teamPlusSchedule, setTeamPlusSchedule] = useState<TeamPlusScheduleItem[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,17 +56,7 @@ export default function Schedule() {
       const data = await response.json();
       setScheduleItems(Array.isArray(data) ? data : []);
       
-      // Fetch team plus schedule
-      try {
-        const teamPlusResponse = await fetch(API_ENDPOINTS.teamPlusSchedule);
-        if (teamPlusResponse.ok) {
-          const teamPlusData = await teamPlusResponse.json();
-          setTeamPlusSchedule(Array.isArray(teamPlusData) ? teamPlusData : []);
-        }
-      } catch (teamPlusError) {
-        // Team plus schedule non disponibile, continua senza
-        console.log("Team Plus schedule non disponibile");
-      }
+
     } catch (error) {
       console.error("Errore nel caricamento della programmazione:", error);
       setError(error instanceof Error ? error.message : 'Errore sconosciuto');
@@ -95,12 +73,7 @@ export default function Schedule() {
       .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
   };
 
-  const getTeamPlusItemsForDay = (dayOfWeek: number) => {
-    if (!Array.isArray(teamPlusSchedule)) return [];
-    return teamPlusSchedule
-      .filter(item => item && item.day_of_week === dayOfWeek)
-      .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
-  };
+
 
   if (loading) {
     return (
@@ -285,144 +258,7 @@ export default function Schedule() {
           </ScrollReveal>
         )}
 
-        {/* Sezione Team Plus */}
-        {teamPlusSchedule.length > 0 && (
-          <div className="mt-16">
-            <ScrollReveal>
-              <div className="text-center mb-12">
-                <div className="inline-flex items-center gap-2 mb-4">
-                  <Badge variant="secondary" className="text-lg px-4 py-2">
-                    Team Plus
-                  </Badge>
-                </div>
-                <h2 className="text-3xl md:text-4xl font-bold mb-2">
-                  Programmazione Team Plus
-                </h2>
-                <p className="text-lg text-muted-foreground">
-                  Contenuti aggiuntivi dai membri del team
-                </p>
-              </div>
-            </ScrollReveal>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {DAYS_OF_WEEK.map((day) => {
-                const dayItems = getTeamPlusItemsForDay(day.value);
-                const hasItems = dayItems.length > 0;
-
-                if (!hasItems) return null;
-
-                return (
-                  <ScrollReveal key={`team-plus-${day.value}`}>
-                    <Card className="h-full border-primary/50">
-                      <CardHeader className="pb-4">
-                        <CardTitle className="flex items-center justify-between">
-                          <span className="text-lg">{day.label}</span>
-                          <Badge variant="default" className="text-xs">
-                            {day.short}
-                          </Badge>
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-3">
-                          {dayItems.map((item) => (
-                            <div
-                              key={item.id}
-                              className="p-4 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors border border-border"
-                            >
-                              <div className="flex flex-col items-center gap-3 text-center">
-                                {item.thumbnail ? (
-                                  <div className="relative">
-                                    <OptimizedImage
-                                      src={item.thumbnail}
-                                      alt={item.title}
-                                      className="h-24 w-auto max-w-full object-contain rounded"
-                                      loading="lazy"
-                                      decoding="async"
-                                      fetchPriority="low"
-                                      width={192}
-                                      height={96}
-                                    />
-                                    {item.type === 'live' && (
-                                      <div className="absolute -top-1 -right-1">
-                                        <span className="flex h-3 w-3">
-                                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                          <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                                        </span>
-                                      </div>
-                                    )}
-                                  </div>
-                                ) : item.type === 'live' ? (
-                                  <div className="relative">
-                                    <Radio className="h-5 w-5 text-red-500" />
-                                    <span className="absolute -top-1 -right-1 flex h-2 w-2">
-                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                                      <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <Video className="h-5 w-5 text-primary" />
-                                )}
-                                
-                                <div className="w-full">
-                                  <div className="flex items-center justify-center gap-2 mb-2 flex-wrap">
-                                    <Badge
-                                      variant={item.type === 'live' ? 'destructive' : 'default'}
-                                      className="text-xs"
-                                    >
-                                      {item.type === 'live' ? 'LIVE' : 'VIDEO'}
-                                    </Badge>
-                                    <span className="text-xs font-medium text-primary">
-                                      {item.time}
-                                    </span>
-                                  </div>
-                                  
-                                  <div className="flex items-center justify-center gap-2 mb-2">
-                                    <Badge variant="outline" className="text-xs">
-                                      {item.user_name}
-                                    </Badge>
-                                  </div>
-                                  
-                                  <h3 className="font-semibold text-sm mb-1">
-                                    {item.title}
-                                  </h3>
-                                  
-                                  {item.description && (
-                                    <p className="text-xs text-muted-foreground mb-2">
-                                      {item.description}
-                                    </p>
-                                  )}
-                                  
-                                  {item.link && (
-                                    <Button
-                                      variant="link"
-                                      size="sm"
-                                      className="h-auto p-0 text-xs mx-auto"
-                                      asChild
-                                    >
-                                      <a
-                                        href={item.link}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex items-center gap-1"
-                                      >
-                                        Vai al link
-                                        <ExternalLink className="h-3 w-3" />
-                                      </a>
-                                    </Button>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </ScrollReveal>
-                );
-              })}
-            </div>
-          </div>
-        )}
       </div>
     </section>
     </Layout>

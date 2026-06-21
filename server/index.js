@@ -191,7 +191,6 @@ const db = new Low(adapter, {
   staff: [], 
   events: [],
   schedule: [],
-  team_plus_schedule: [],
   products: [], 
   playlists: [], 
   videos: [], 
@@ -210,7 +209,6 @@ db.data ||= {
   staff: [], 
   events: [],
   schedule: [],
-  team_plus_schedule: [],
   products: [], 
   playlists: [], 
   videos: [], 
@@ -225,6 +223,18 @@ db.data ||= {
 db.data.bot_modules ||= {};
 db.data.bot_builder_flows ||= [];
 db.data.bot_config ||= {};
+
+if (db.data.team) {
+  const oldLength = db.data.team.length;
+  db.data.team = db.data.team.filter(t => t.role !== "Team Base");
+  
+  db.data.team.forEach(t => {
+    if (t.role === "Team Plus") {
+      t.role = "Team Mattoncini";
+    }
+  });
+}
+
 await db.write();
 
 // Discord Bot Control Panel - foundation
@@ -1517,119 +1527,6 @@ app.put("/api/schedule/:id", async (req, res) => {
   }
 });
 
-// Team Plus Schedule endpoints
-app.get("/api/team-plus-schedule", async (req, res) => {
-  try {
-    await db.read();
-    
-    // Initialize display_order for items that don't have it
-    let needsUpdate = false;
-    db.data.team_plus_schedule.forEach((item, index) => {
-      if (item.display_order === undefined || item.display_order === null) {
-        item.display_order = index + 1;
-        needsUpdate = true;
-      }
-    });
-    
-    if (needsUpdate) {
-      await db.write();
-    }
-    
-    const sorted = (db.data.team_plus_schedule || []).sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
-    res.json(sorted);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get("/api/team-plus-schedule/:userId", async (req, res) => {
-  try {
-    await db.read();
-    const userId = req.params.userId;
-    const userSchedule = (db.data.team_plus_schedule || []).filter(item => item.user_id === userId);
-    const sorted = userSchedule.sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
-    res.json(sorted);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post("/api/team-plus-schedule", async (req, res) => {
-  try {
-    await db.read();
-    const { user_id, user_name, title, type, day_of_week, time, description, link, thumbnail } = req.body;
-    
-    // Get max order for this user's items
-    const userItems = (db.data.team_plus_schedule || []).filter(item => item.user_id === user_id);
-    const maxOrder = userItems.length > 0 ? Math.max(...userItems.map(s => s.display_order || 0)) : 0;
-    
-    const newScheduleItem = {
-      id: Date.now(),
-      user_id,
-      user_name,
-      title,
-      type,
-      day_of_week,
-      time,
-      description: description || null,
-      link: link || null,
-      thumbnail: thumbnail || null,
-      display_order: maxOrder + 1,
-      created_at: new Date().toISOString(),
-    };
-    
-    db.data.team_plus_schedule.push(newScheduleItem);
-    await db.write();
-    res.json(newScheduleItem);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.delete("/api/team-plus-schedule/:id", async (req, res) => {
-  try {
-    await db.read();
-    const id = parseInt(req.params.id);
-    db.data.team_plus_schedule = db.data.team_plus_schedule.filter((item) => item.id !== id);
-    await db.write();
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.put("/api/team-plus-schedule/reorder", async (req, res) => {
-  try {
-    await db.read();
-    const { items } = req.body; // Array of { id, display_order }
-    items.forEach(({ id, display_order }) => {
-      const index = db.data.team_plus_schedule.findIndex((item) => item.id === id);
-      if (index !== -1) {
-        db.data.team_plus_schedule[index].display_order = display_order;
-      }
-    });
-    await db.write();
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.put("/api/team-plus-schedule/:id", async (req, res) => {
-  try {
-    await db.read();
-    const id = parseInt(req.params.id);
-    const index = db.data.team_plus_schedule.findIndex((item) => item.id === id);
-    if (index === -1) {
-      return res.status(404).json({ error: "Schedule item not found" });
-    }
-    db.data.team_plus_schedule[index] = { ...db.data.team_plus_schedule[index], ...req.body, id };
-    await db.write();
-    res.json(db.data.team_plus_schedule[index]);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 // Products endpoints
 app.get("/api/products", async (req, res) => {

@@ -16,7 +16,6 @@ import Discord from "./pages/Discord";
 import Community from "./pages/Community";
 import Schedule from "./pages/Schedule";
 import Admin from "./pages/Admin";
-import TeamPlus from "./pages/TeamPlus";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -114,7 +113,6 @@ const App = () => (
               <Route path="/schedule" element={<Schedule />} />
               <Route path="/programmazione" element={<Schedule />} />
               <Route path="/admin" element={<Admin />} />
-              <Route path="/team-plus" element={<TeamPlus />} />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
