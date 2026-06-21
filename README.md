@@ -379,7 +379,6 @@ legochris-hub/
 │   │   └── CartContext.tsx            # Shopping cart state
 │   ├── hooks/
 │   │   ├── use-admin.tsx              # Admin role hook
-│   │   ├── use-team-plus.tsx          # Team Plus role hook
 │   │   ├── use-mobile.tsx             # Mobile detection
 │   │   ├── use-cookie-consent.ts      # Cookie consent state
 │   │   └── use-toast.ts               # Toast notifications
@@ -396,8 +395,6 @@ legochris-hub/
 │   │   ├── Login.tsx
 │   │   ├── Profile.tsx
 │   │   ├── Shop.tsx
-│   │   ├── Schedule.tsx
-│   │   ├── TeamPlus.tsx
 │   │   └── [...other pages]
 │   ├── assets/                        # Static assets
 │   ├── App.tsx                        # Main app component
@@ -1119,6 +1116,19 @@ Found a bug? Open an issue on GitHub with:
 
 
 
+### Recent Updates (June 2026)
+
+🚀 **Features & Refactoring:**
+- **Legacy Cleanup:** Removed outdated "Team Plus" logic, pages (`TeamPlus.tsx`, `Schedule.tsx`), and corresponding endpoints.
+- **Team Consolidation:** Removed "Team Base" and migrated remaining users automatically into "Team Mattoncini".
+- **Socials:** Added the official Twitch link to the footer's social icons.
+- **Admin Panel Enhancements:** 
+  - Updated the Staff Management roles list to accurately reflect the community hierarchy (Owner, Manager, Admin, Mod, etc.).
+  - Replaced native emojis with modern SVG icons in the Orders Management view.
+- **User Profile:** Newsletter subscription banner is now smartly hidden if the user's email is already subscribed.
+
+---
+
 ### Recent Updates (April 2026)
 
 🛠️ **Discord Bot Code Generation:**
@@ -1161,4 +1171,4 @@ Built with 🧱 for the LegoChris community.
 
 ---
 
-**Last Updated:** February 2026
+**Last Updated:** June 2026
