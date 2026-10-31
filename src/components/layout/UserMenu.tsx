@@ -14,6 +14,7 @@ import { Settings, User, LogOut, Shield, ShoppingBag, Calendar } from "lucide-re
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { API_ENDPOINTS } from "@/lib/api";
+import { toWebpUploadUrl } from "@/lib/imageUtils";
 
 export const UserMenu = () => {
   const { user, signOut } = useAuth();
@@ -64,7 +65,7 @@ export const UserMenu = () => {
   };
 
   // Estrai foto profilo
-  let avatarUrl = user.user_metadata?.custom_avatar_url || "";
+  let avatarUrl = toWebpUploadUrl(user.user_metadata?.custom_avatar_url || "");
   
   // Se non c'è avatar custom, prendi dal primo provider OAuth
   if (!avatarUrl && user.identities && user.identities.length > 0) {

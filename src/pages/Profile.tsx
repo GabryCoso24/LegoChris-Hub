@@ -14,6 +14,7 @@ import { Camera, Save } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { API_ENDPOINTS } from "@/lib/api";
+import { toWebpUploadUrl } from "@/lib/imageUtils";
 
 const Profile = () => {
   const { user, loading, refreshUser } = useAuth();
@@ -63,7 +64,8 @@ const Profile = () => {
 
       setInitialNickname(finalNickname);
       setNickname(finalNickname);
-      setAvatarUrl(user.user_metadata?.custom_avatar_url || avatarFromProvider);
+      const customAvatar = user.user_metadata?.custom_avatar_url;
+      setAvatarUrl(customAvatar ? toWebpUploadUrl(customAvatar) : avatarFromProvider);
       
       // Controlla se iscritto alla newsletter
       setNewsletter(false);

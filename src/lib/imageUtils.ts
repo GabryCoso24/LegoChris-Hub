@@ -35,3 +35,13 @@ export function getAvatarUrl(avatarUrl: string | null | undefined, seed?: string
   
   return getImageUrl(avatarUrl);
 }
+
+/**
+ * Le immagini caricate (/uploads/...) sono state convertite in WebP sul server.
+ * I vecchi URL salvati altrove (es. i metadata utente di Supabase) puntano ancora
+ * all'estensione originale: li riporta alla versione .webp.
+ * Gli URL esterni o già .webp restano invariati.
+ */
+export function toWebpUploadUrl(imageUrl: string): string {
+  return imageUrl.replace(/(\/uploads\/[A-Za-z0-9._-]+)\.(png|jpe?g|gif|bmp|tiff?|avif)(?![A-Za-z0-9])/i, "$1.webp");
+}

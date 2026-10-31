@@ -13,6 +13,7 @@ import crypto from "crypto";
 import os from "os";
 import { spawn } from "child_process";
 import pty from "node-pty";
+import { migrateUploadsToWebp, rewriteLegacyImageUrls, toWebpBuffer } from "./imageOptimizer.js";
 import { welcomeEmail, passwordResetEmail, orderReceiptEmail, newsletterEmail, orderStatusUpdateEmail, adminNewOrderEmail } from "./emailTemplates.js";
 import { custom } from "zod";
 
@@ -122,22 +123,18 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
+// Directory dove vengono archiviati gli originali delle immagini convertite in WebP
+const uploadsBackupDir = path.join(__dirname, "uploads-originals");
+
 // Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  },
-});
+// Il file resta in memoria: viene convertito in WebP e solo allora scritto su disco
+const storage = multer.memoryStorage();
 
 const upload = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
   fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif|webp/;
+    const allowedTypes = /jpeg|jpg|png|gif|webp|avif|bmp|tiff?/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
     if (mimetype && extname) {
@@ -178,7 +175,21 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(express.json());
-app.use("/uploads", express.static(uploadsDir));
+// Retrocompatibilità: se viene richiesto un vecchio URL (es. /uploads/x.png) che è stato
+// convertito, serve automaticamente la versione WebP (x.webp)
+const LEGACY_IMAGE_EXT_RE = /\.(png|jpe?g|gif|bmp|tiff?|avif)(?=\?|$)/i;
+app.use("/uploads", (req, res, next) => {
+  if (!LEGACY_IMAGE_EXT_RE.test(req.path)) return next();
+  const requestedName = path.basename(req.path);
+  if (fs.existsSync(path.join(uploadsDir, requestedName))) return next();
+  const webpName = requestedName.replace(LEGACY_IMAGE_EXT_RE, ".webp");
+  if (fs.existsSync(path.join(uploadsDir, webpName))) {
+    req.url = req.url.replace(LEGACY_IMAGE_EXT_RE, ".webp");
+  }
+  next();
+});
+// I nomi file sono univoci e non cambiano mai: si possono mettere in cache a lungo
+app.use("/uploads", express.static(uploadsDir, { maxAge: "30d", immutable: true }));
 
 // Serve public folder for email assets (logo, etc.)
 app.use(express.static(path.join(__dirname, "public")));
@@ -930,17 +941,35 @@ ${bodyFromNodes
 }
 
 // File upload endpoint
-app.post("/api/upload", upload.single("image"), (req, res) => {
-  try {
+// Ogni immagine caricata (in qualsiasi formato supportato) viene convertita in WebP
+app.post("/api/upload", (req, res) => {
+  upload.single("image")(req, res, async (uploadErr) => {
+    if (uploadErr) {
+      return res.status(400).json({ error: uploadErr.message });
+    }
     if (!req.file) {
       return res.status(400).json({ error: "No file uploaded" });
     }
-    // Return full URL with backend address for network access
-    const fileUrl = `${publicBaseUrl}/uploads/${req.file.filename}`;
-    res.json({ url: fileUrl });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+
+    let webp;
+    try {
+      webp = await toWebpBuffer(req.file.buffer);
+    } catch (err) {
+      console.warn("[upload] Immagine non valida:", err.message);
+      return res.status(400).json({ error: "Il file non è un'immagine valida o non è supportata" });
+    }
+
+    try {
+      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+      const filename = `${uniqueSuffix}.webp`;
+      await fs.promises.writeFile(path.join(uploadsDir, filename), webp.buffer);
+      // Return full URL with backend address for network access
+      const fileUrl = `${publicBaseUrl}/uploads/${filename}`;
+      res.json({ url: fileUrl, size: webp.buffer.length, originalSize: req.file.size });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 });
 
 // Profile endpoints
@@ -3350,4 +3379,22 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   1. Update .env: VITE_API_URL="http://${hostIp}:${PORT}"`);
   console.log(`   2. Restart dev server (npm run dev)`);
   console.log(`   3. Open on mobile: http://${hostIp}:5173\n`);
+
+  // Converte in WebP le immagini già presenti in uploads/ e aggiorna gli URL nel database.
+  // Gira in background DOPO l'avvio, così l'API risponde subito anche se ci sono molte immagini.
+  // Nel frattempo i vecchi URL (.png/.jpg) restano validi grazie al fallback su /uploads.
+  // Operazione idempotente: se non c'è nulla da convertire termina subito.
+  (async () => {
+    try {
+      await migrateUploadsToWebp({ uploadsDir, backupDir: uploadsBackupDir });
+      await db.read();
+      const rewrittenUrls = rewriteLegacyImageUrls(db.data, uploadsDir);
+      if (rewrittenUrls > 0) {
+        await db.write();
+        console.log(`🔗 ${rewrittenUrls} URL immagine aggiornati a WebP nel database`);
+      }
+    } catch (err) {
+      console.error("❌ Migrazione immagini WebP fallita:", err);
+    }
+  })();
 });
